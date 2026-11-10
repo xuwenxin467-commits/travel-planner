@@ -2278,8 +2278,8 @@ function smartSchedulePanel(day, stops) {
     return `<section class="smart-reminder-panel" data-smart-day="${day}">
       <div class="smart-reminder-header">
         <div><strong>🔔 ${currentLanguage === "en" ? "Smart schedule alerts" : currentLanguage === "ko" ? "스마트 일정 알림" : "智能行程提醒"}</strong>
-        <p>${currentLanguage === "en" ? "Keep this page open to receive departure reminders." : currentLanguage === "ko" ? "출발 알림을 받으려면 이 페이지를 열어 두세요." : "保持页面打开；行程延误时会提醒你何时出发。"}</p></div>
-        <button type="button" class="smart-notification-enable" onclick="enableSmartNotifications()">${currentLanguage === "en" ? "Enable notifications" : currentLanguage === "ko" ? "알림 켜기" : "开启通知"}</button>
+        <p>${currentLanguage === "en" ? "Keep this page open to receive departure reminders." : currentLanguage === "ko" ? "출발 알림을 받으려면 이 페이지를 열어 두세요." : "保持本页面打开；到出发时间时会在页面中央弹窗提醒。"}</p></div>
+        <button type="button" class="smart-notification-enable" onclick="enableSmartNotifications()">${currentLanguage === "en" ? "Enable page alerts" : currentLanguage === "ko" ? "페이지 알림 켜기" : "开启页面弹窗提醒"}</button>
       </div>
       <div class="smart-stop-list">${rows}</div>
       <p class="smart-reminder-footnote">${currentLanguage === "en" ? "Travel time is an estimate (30 min per transfer). Actual traffic may vary." : currentLanguage === "ko" ? "이동 시간은 구간당 30분으로 추정하며 실제 교통 상황에 따라 달라질 수 있습니다." : "交通时间暂按每段 30 分钟估算，实际请以地图和路况为准。"}</p>
@@ -2287,16 +2287,40 @@ function smartSchedulePanel(day, stops) {
 }
 
 function enableSmartNotifications() {
-    if (!("Notification" in window)) {
-        alert(currentLanguage === "en" ? "This browser does not support notifications." : currentLanguage === "ko" ? "이 브라우저는 알림을 지원하지 않습니다." : "当前浏览器不支持系统通知。");
-        return;
+    // 微信内置浏览器及部分 iPhone 浏览器不可靠支持系统通知；改用网页内弹窗。
+    showSmartReminderMessage(
+        currentLanguage === "en" ? "Page alerts are enabled. Keep this page open during your trip." :
+        currentLanguage === "ko" ? "페이지 알림이 켜졌습니다. 여행 중 이 페이지를 열어 두세요." :
+        "页面弹窗提醒已开启。旅行期间请保持这个网页打开。",
+        "success"
+    );
+    showSmartReminderPopup(
+        currentLanguage === "en" ? "Page alerts enabled" : currentLanguage === "ko" ? "페이지 알림 켜짐" : "页面提醒已开启",
+        currentLanguage === "en" ? "When it is time to leave, a reminder will appear in this page. Keep the page open." : currentLanguage === "ko" ? "출발 시간이 되면 이 페이지에 알림 창이 표시됩니다. 페이지를 열어 두세요." : "到该出发的时间时，网页会弹出醒目的提醒。请保持网页打开。",
+        "success"
+    );
+}
+
+function showSmartReminderPopup(title, body, type = "urgent") {
+    let overlay = document.getElementById("smartReminderPopup");
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "smartReminderPopup";
+        overlay.className = "smart-reminder-overlay";
+        overlay.setAttribute("role", "alertdialog");
+        overlay.setAttribute("aria-modal", "true");
+        overlay.setAttribute("aria-labelledby", "smartReminderPopupTitle");
+        overlay.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🔔</div><h2 id="smartReminderPopupTitle"></h2><p id="smartReminderPopupBody"></p><button type="button" id="smartReminderPopupClose">我知道了</button></div>`;
+        document.body.appendChild(overlay);
+        overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+        overlay.querySelector("#smartReminderPopupClose").addEventListener("click", () => overlay.remove());
     }
-    Notification.requestPermission().then(permission => {
-        const message = permission === "granted"
-            ? (currentLanguage === "en" ? "Smart notifications enabled." : currentLanguage === "ko" ? "스마트 알림이 켜졌습니다." : "智能通知已开启。")
-            : (currentLanguage === "en" ? "Notification permission was not granted. In-page reminders will still work." : currentLanguage === "ko" ? "알림 권한이 허용되지 않았습니다. 페이지 내 알림은 계속 표시됩니다." : "未获得通知权限，页面内提醒仍可使用。");
-        showSmartReminderMessage(message, permission === "granted" ? "success" : "warning");
-    });
+    overlay.className = `smart-reminder-overlay ${type}`;
+    overlay.querySelector("#smartReminderPopupTitle").textContent = title;
+    overlay.querySelector("#smartReminderPopupBody").textContent = body;
+    const close = overlay.querySelector("#smartReminderPopupClose");
+    close.textContent = currentLanguage === "en" ? "Got it" : currentLanguage === "ko" ? "확인" : "我知道了";
+    overlay.hidden = false;
 }
 
 function showSmartReminderMessage(message, type = "warning") {
@@ -2315,10 +2339,11 @@ function showSmartReminderMessage(message, type = "warning") {
 }
 
 function sendSmartNotification(title, body, tag) {
+    // 不依赖系统通知 API；直接在页面中央显示弹窗，适配微信内置浏览器。
     showSmartReminderMessage(`${title}：${body}`, "urgent");
-    if ("Notification" in window && Notification.permission === "granted") {
-        try { new Notification(title, { body, tag, requireInteraction: true }); } catch (error) { console.warn("Notification failed", error); }
-    }
+    showSmartReminderPopup(title, body, "urgent");
+    // iOS Safari/微信通常不支持网页振动；调用失败不影响弹窗。
+    try { if (navigator.vibrate) navigator.vibrate([180, 80, 180]); } catch (error) { /* optional */ }
 }
 
 function finishSmartStop(day, stopIndex) {
