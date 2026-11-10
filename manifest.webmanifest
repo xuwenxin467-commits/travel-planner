@@ -1,0 +1,15 @@
+{
+  "name": "Travel Planner - 智游旅行",
+  "short_name": "Travel Planner",
+  "description": "旅行路线规划、自定义景点与智能行程提醒",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f8f3",
+  "theme_color": "#174b3b",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

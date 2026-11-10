@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Travel Planner">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#174b3b">
+  <title>旅游路线推荐系统</title>
+  <link rel="stylesheet" href="style.css">
+
+<!-- 地图样式 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="旅游路线推荐系统首页">
+        <span class="brand-mark">✦</span>
+        <span class="brand-name" id="brandName">Travel Planner</span>
+      </a>
+      <nav class="language-switch" aria-label="Language selector">
+        <button type="button" onclick="changeLanguage('zh')" aria-label="中文">中文</button>
+        <button type="button" onclick="changeLanguage('ko')" aria-label="한국어">한국어</button>
+        <button type="button" onclick="changeLanguage('en')" aria-label="English">English</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" class="page-shell">
+    <!-- 实时定位面板：固定显示在页面顶部 -->
+    <section id="liveLocationTop" class="live-location-wrap" aria-label="实时位置追踪"></section>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow" id="heroEyebrow">YOUR NEXT JOURNEY</p>
+        <h1 id="title">你的旅行，我来规划</h1>
+        <p id="subtitle" class="hero-subtitle">输入你的旅行需求，生成专属旅游攻略</p>
+        <div class="hero-tags">
+    <span id="heroTagRegions">45 个地区</span>
+    <span id="heroTagLanguages">中 / 韩 / 英</span>
+    <span id="heroTagTimeline">智能行程时间线</span>
+</div>
+      </div>
+      <div class="hero-illustration" aria-hidden="true">
+        <div class="sun"></div><div class="hill hill-one"></div><div class="hill hill-two"></div>
+        <div class="route-line"></div><div class="map-pin pin-one">●</div><div class="map-pin pin-two">●</div>
+      </div>
+    </section>
+
+    <section class="planner-layout">
+      <form class="planner-card" onsubmit="event.preventDefault(); generatePlan();">
+        <h2 id="plannerHeading">计划你的旅行</h2>
+<p id="plannerDescription">填写旅行需求，生成每日安排</p>
+
+        <div class="field-group">
+          <label id="destinationTitle" for="destination">你想去哪里？</label>
+          <input id="destination" name="destination" list="destinationOptions" type="text" autocomplete="off" placeholder="请输入城市，例如：南京" required>
+          <datalist id="destinationOptions">
+            <option value="南京"></option><option value="首尔"></option><option value="上海"></option><option value="北京"></option><option value="武汉"></option><option value="釜山"></option><option value="成都"></option><option value="重庆"></option><option value="杭州"></option><option value="西安"></option><option value="广州"></option><option value="苏州"></option><option value="厦门"></option><option value="深圳"></option><option value="东京"></option><option value="大阪"></option><option value="京都"></option><option value="济州岛"></option><option value="青岛"></option><option value="三亚"></option><option value="丽江"></option><option value="哈尔滨"></option><option value="桂林"></option><option value="大邱"></option><option value="仁川"></option><option value="庆州"></option><option value="福冈"></option><option value="札幌"></option><option value="名古屋"></option><option value="冲绳"></option><option value="天津"></option><option value="香港"></option><option value="澳门"></option><option value="长沙"></option><option value="张家界"></option><option value="昆明"></option><option value="大理"></option><option value="全州"></option><option value="水原"></option><option value="江陵"></option><option value="横滨"></option><option value="奈良"></option><option value="神户"></option><option value="广岛"></option><option value="金泽"></option>
+          </datalist>
+          <p class="field-hint" id="destinationHint">可输入中文、韩文或英文城市名</p>
+        </div>
+
+        <div class="field-group">
+          <label id="daysTitle">你想去多久？</label>
+          <div class="choice-row days" role="group" aria-label="旅行天数">
+            <button type="button" onclick="selectDays(this, 2)">2天</button>
+            <button type="button" onclick="selectDays(this, 3)">3天</button>
+            <button type="button" onclick="selectDays(this, 4)">4天</button>
+            <button type="button" onclick="selectDays(this, 5)">5天</button>
+          </div>
+          <p id="selectedDays" class="selection-note">尚未选择</p>
+        </div>
+
+        <div class="field-group">
+          <label id="tripStartDateTitle" for="tripStartDate">旅行开始日期</label>
+          <input id="tripStartDate" name="tripStartDate" type="date">
+          <p class="field-hint" id="tripStartDateHint">用于判断当前是行程第几天，以免跨天提醒错位。</p>
+        </div>
+
+        <div class="field-group">
+          <label id="peopleTitle">同行人数</label>
+          <div class="choice-row people" role="group" aria-label="同行人数">
+            <button type="button" onclick="selectPeople(this, 1)">1人</button>
+            <button type="button" onclick="selectPeople(this, 2)">2人</button>
+            <button type="button" onclick="selectPeople(this, 3)">3人</button>
+            <button type="button" onclick="selectPeople(this, 4)">4人</button>
+          </div>
+          <p id="selectedPeople" class="selection-note">尚未选择</p>
+        </div>
+
+        <div class="field-group">
+          <label id="budgetTitle" for="budget">旅行预算</label>
+          <div class="budget-input">
+            <input id="budget" name="budget" type="number" min="0" step="100" placeholder="请输入预算，例如：2000">
+            <span>元</span>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label id="preferenceTitle">旅行偏好</label>
+          <div class="preferences-grid">
+            <button type="button" id="prefFood" onclick="togglePreference(this, '美食')"><span>吃吃喝喝</span></button>
+            <button type="button" id="prefShopping" onclick="togglePreference(this, '购物')"><span>逛街购物</span></button>
+            <button type="button" id="prefHistory" onclick="togglePreference(this, '历史')"><span>历史古建</span></button>
+            <button type="button" id="prefNature" onclick="togglePreference(this, '自然')"><span>自然风光</span></button>
+            <button type="button" id="prefPhoto" onclick="togglePreference(this, '拍照')"><span>拍照出片</span></button>
+            <button type="button" id="prefCulture" onclick="togglePreference(this, '文艺')"><span>文艺展览</span></button>
+          </div>
+        </div>
+
+        <div class="field-group route-mode-group">
+          <label id="routeModeTitle">路线模式</label>
+          <div class="route-mode-switch" role="group" aria-label="Route mode">
+            <button type="button" id="automaticModeButton" class="route-mode-button selected" onclick="setRouteMode('automatic')">自动路线</button>
+            <button type="button" id="customModeButton" class="route-mode-button" onclick="setRouteMode('custom')">Custom 自定义</button>
+          </div>
+          <p id="routeModeHint" class="field-hint">自动模式会根据偏好安排景点；自定义模式可自行选择想去的地点。</p>
+          <div id="customAttractionPicker" class="custom-attraction-picker" hidden>
+            <div class="custom-picker-heading">
+              <strong id="customPickerTitle">选择想去的景点</strong>
+              <span id="customSelectedCount" aria-live="polite">已选择 0 个</span>
+            </div>
+            <p id="customPickerHint" class="field-hint">勾选景点，系统会按选择顺序安排路线。</p>
+            <div id="customAttractionList" class="custom-attraction-list"></div>
+          </div>
+        </div>
+
+        <button type="submit" class="primary-button" id="planButton">智能规划 <span aria-hidden="true">↗</span></button>
+        <p class="privacy-note" id="privacyNote">路线及时间为规划参考；出发前请核对地图、开放时间和交通信息。</p>
+      </form>
+
+      <section class="results-column" aria-label="旅游攻略结果">
+        <div class="results-header">
+          <div>
+    <p class="eyebrow" id="resultsEyebrow">你的旅行安排</p>
+    <h2 id="resultsHeading">旅游攻略</h2>
+</div>
+          <span class="results-icon">✧</span>
+        </div>
+        <div id="result" class="results-content">
+          <div class="empty-state">
+            <div class="empty-icon">✈</div>
+            <h3 id="emptyResultTitle">你的旅程即将开始</h3>
+<p id="emptyResultDescription">选择目的地、天数和人数后，生成专属旅游攻略。</p>
+          </div>
+        </div>
+        <div id="saveArea" class="save-area" style="display:none;">
+          <button type="button" id="saveButton" class="secondary-button" onclick="savePlan()">💾 保存攻略</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="saved-section">
+      <div class="section-heading">
+    <span class="step-number">02</span>
+    <div>
+        <h2 id="savedTitle">我的攻略</h2>
+        <p id="savedDescription">随时查看之前保存的行程</p>
+    </div>
+</div>
+      <p id="savedEmpty" class="saved-empty">暂无保存的攻略</p>
+      <div id="savedList" class="saved-list"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span id="footerBrand">智游旅行</span>
+    <span id="footerSlogan">用心规划 · 畅享旅程</span>
+</footer>
+  <script src="data.js"></script>
+
+<!-- 地图功能 -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script src="script.js"></script>
+</body>
+</html>
