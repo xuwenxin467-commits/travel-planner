@@ -558,3 +558,13 @@ img, video, iframe { max-width: 100%; }
 .smart-reminder-dialog button { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: var(--green, #28613b); color: #fff; font-size: 16px; font-weight: 700; }
 .smart-reminder-overlay.success .smart-reminder-dialog h2 { color: #28613b; }
 @keyframes smartReminderPop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+
+/* 行程报告导出按钮 */
+.save-area { display: flex; flex-wrap: wrap; gap: 9px; }
+.export-button { background: #fff; }
+.export-button:hover { background: var(--mint); }
+@media (max-width: 540px) {
+  .save-area { display: grid; grid-template-columns: 1fr; }
+  .save-area button { width: 100%; min-height: 42px; }
+}
