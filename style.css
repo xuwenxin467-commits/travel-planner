@@ -314,7 +314,8 @@ input::placeholder { color: #9ba9a0; font-size: 12px; }
 .smart-stop-time { color: var(--green); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .smart-stop-main strong { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .smart-stop-status { color: var(--muted); font-size: 10px; white-space: nowrap; }
-.smart-stop-next { margin: 5px 0 7px; color: var(--muted); font-size: 10px; }
+.smart-stop-next { margin: 5px 0 4px; color: var(--muted); font-size: 10px; }
+.smart-stop-departure { margin: 0 0 8px; color: #9a4c16; font-size: 11px; font-weight: 800; }
 .smart-finish-button:disabled { opacity: .55; cursor: default; }
 .smart-reminder-live-message { margin: 0 0 12px; padding: 12px 14px; border: 1px solid #e7c978; border-radius: 10px; background: #fff8e7; color: #805a12; font-size: 13px; line-height: 1.5; font-weight: 700; }
 .smart-reminder-live-message.success { border-color: #c8dfce; background: #f0f8f2; color: #28613b; }
@@ -568,3 +569,20 @@ img, video, iframe { max-width: 100%; }
   .save-area { display: grid; grid-template-columns: 1fr; }
   .save-area button { width: 100%; min-height: 42px; }
 }
+
+
+/* 旅途中编辑路线 */
+.trip-edit-card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.trip-edit-card-heading .place-title { min-width:0; }
+.trip-remove-button { flex:0 0 34px; width:34px; height:34px; margin-top:-5px; border:1px solid #f0caca; border-radius:50%; background:#fff7f6; color:#b33b32; font-size:24px; line-height:1; font-weight:500; }
+.trip-remove-button:active { transform:scale(.94); background:#ffe9e6; }
+.trip-alternative-box { margin:16px 0 4px; padding:15px; border:1px solid #cfe2d5; border-radius:15px; background:#f5faf6; }
+.trip-alternative-heading { color:var(--green); font-size:14px; font-weight:800; }
+.trip-alternative-box > p { margin:4px 0 10px; color:var(--muted); font-size:12px; }
+.trip-alternative-list { display:grid; gap:8px; }
+.trip-alternative-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border:1px solid var(--line); border-radius:11px; background:#fff; }
+.trip-alternative-item > div { min-width:0; display:grid; gap:3px; }
+.trip-alternative-item strong { font-size:13px; overflow-wrap:anywhere; }
+.trip-alternative-item small { color:var(--muted); font-size:11px; }
+.trip-alternative-item button { flex:0 0 auto; min-height:38px; padding:7px 11px; border:0; border-radius:9px; background:var(--green); color:#fff; font-size:12px; font-weight:700; }
+@media (max-width:540px) { .trip-alternative-item button { min-height:42px; } }

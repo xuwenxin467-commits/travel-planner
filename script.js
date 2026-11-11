@@ -15,6 +15,8 @@ let hasGeneratedPlan = false;
 let routeMode = "automatic";
 let customSelectedAttractionKeys = [];
 let customPickerCity = "";
+let currentTripEditContext = null; // 当前路线编辑所需的城市景点数据
+let tripRemovedAttractionNames = new Set();
 
 // 智能行程提醒：仅在页面打开期间运行
 let smartReminderTimer = null;
@@ -2263,6 +2265,7 @@ function smartSchedulePanel(day, stops) {
         const range = parseClockRange(stop.range);
         const name = getText(stop.attraction.name) || `Stop ${index + 1}`;
         const nextName = validStops[index + 1] ? getText(validStops[index + 1].attraction.name) : "";
+        const leaveAt = validStops[index + 1] ? validStops[index + 1].range ? parseClockRange(validStops[index + 1].range).start - 30 : null : null;
         return `<div class="smart-stop-row" data-smart-stop data-day="${day}" data-stop="${index}"
                     data-start="${range.start}" data-end="${range.end}" data-name="${escapeHTML(name)}"
                     data-next-name="${escapeHTML(nextName)}" data-travel="30">
@@ -2271,14 +2274,14 @@ function smartSchedulePanel(day, stops) {
               <strong>${escapeHTML(name)}</strong>
               <span class="smart-stop-status" aria-live="polite">${currentLanguage === "en" ? "Scheduled" : currentLanguage === "ko" ? "예정" : "计划中"}</span>
             </div>
-            ${index < validStops.length - 1 ? `<p class="smart-stop-next">${currentLanguage === "en" ? `Next: ${escapeHTML(nextName)} · estimated travel 30 min` : currentLanguage === "ko" ? `다음 장소: ${escapeHTML(nextName)} · 이동 약 30분` : `下一站：${escapeHTML(nextName)} · 预计交通 30 分钟`}</p>` : ""}
-            <button type="button" class="smart-finish-button" onclick="finishSmartStop(${day}, ${index})">${currentLanguage === "en" ? "Mark finished now" : currentLanguage === "ko" ? "지금 종료로 기록" : "标记为现在结束"}</button>
+            ${index < validStops.length - 1 ? `<p class="smart-stop-next">${currentLanguage === "en" ? `Next: ${escapeHTML(nextName)} · estimated travel 30 min` : currentLanguage === "ko" ? `다음 장소: ${escapeHTML(nextName)} · 이동 약 30분` : `下一站：${escapeHTML(nextName)} · 预计交通 30 分钟`}</p><p class="smart-stop-departure">${currentLanguage === "en" ? `Departure reminder: ${formatClock(leaveAt)}` : currentLanguage === "ko" ? `출발 알림 예정: ${formatClock(leaveAt)}` : `🔔 预计 ${formatClock(leaveAt)} 提醒你出发`}</p>` : ""}
+            <button type="button" class="smart-finish-button" onclick="finishSmartStop(${day}, ${index})">${currentLanguage === "en" ? "Mark finished now" : currentLanguage === "ko" ? "지금 종료로 기록" : "标记为现在结束并调整后续"}</button>
         </div>`;
     }).join("");
     return `<section class="smart-reminder-panel" data-smart-day="${day}">
       <div class="smart-reminder-header">
         <div><strong>🔔 ${currentLanguage === "en" ? "Smart schedule alerts" : currentLanguage === "ko" ? "스마트 일정 알림" : "智能行程提醒"}</strong>
-        <p>${currentLanguage === "en" ? "Keep this page open to receive departure reminders." : currentLanguage === "ko" ? "출발 알림을 받으려면 이 페이지를 열어 두세요." : "保持本页面打开；到出发时间时会在页面中央弹窗提醒。"}</p></div>
+        <p>${currentLanguage === "en" ? "Keep this page open to receive departure reminders." : currentLanguage === "ko" ? "출발 알림을 받으려면 이 페이지를 열어 두세요." : "每到下一站计划开始前 30 分钟，网页会弹窗提醒你出发；请保持页面打开。"}</p></div>
         <button type="button" class="smart-notification-enable" onclick="enableSmartNotifications()">${currentLanguage === "en" ? "Enable page alerts" : currentLanguage === "ko" ? "페이지 알림 켜기" : "开启页面弹窗提醒"}</button>
       </div>
       <div class="smart-stop-list">${rows}</div>
@@ -2346,12 +2349,34 @@ function sendSmartNotification(title, body, tag) {
     try { if (navigator.vibrate) navigator.vibrate([180, 80, 180]); } catch (error) { /* optional */ }
 }
 
-function finishSmartStop(day, stopIndex) {
+function finishSmartStop(day, stopIndex, mode) {
+    // 首次点击先让旅行者选择如何使用提前结束的时间。
+    if (!mode) {
+        let chooser = document.getElementById("smartFinishChoice");
+        if (!chooser) {
+            chooser = document.createElement("div");
+            chooser.id = "smartFinishChoice";
+            chooser.className = "smart-reminder-overlay";
+            chooser.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🕒</div><h2>这个景点已结束</h2><p>你想如何安排后续行程？</p><button type="button" data-finish-mode="advance">立即前往下一站（自动调整时间）</button><button type="button" data-finish-mode="keep">保持原定时间（自由活动）</button><button type="button" data-finish-mode="recommend">看看能否增加一个景点</button><button type="button" data-finish-mode="cancel" class="smart-finish-cancel">暂不操作</button></div>`;
+            document.body.appendChild(chooser);
+            chooser.addEventListener("click", event => {
+                if (event.target === chooser) chooser.remove();
+                const button = event.target.closest("[data-finish-mode]");
+                if (!button) return;
+                const selected = button.dataset.finishMode;
+                chooser.remove();
+                if (selected !== "cancel") finishSmartStop(day, stopIndex, selected);
+            });
+        }
+        chooser.hidden = false;
+        return;
+    }
     const panel = document.querySelector(`[data-smart-day="${day}"]`);
     if (!panel) return;
     const rows = [...panel.querySelectorAll("[data-smart-stop]")];
     const row = rows[stopIndex];
-    if (!row) return;
+    if (!row || row.dataset.completed === "true") return;
+
     const now = new Date();
     const actualEnd = now.getHours() * 60 + now.getMinutes();
     const plannedEnd = Number(row.dataset.end);
@@ -2359,38 +2384,47 @@ function finishSmartStop(day, stopIndex) {
     row.dataset.completed = "true";
     const status = row.querySelector(".smart-stop-status");
     const button = row.querySelector(".smart-finish-button");
-    if (status) status.textContent = currentLanguage === "en" ? `Finished ${formatClock(actualEnd)}` : currentLanguage === "ko" ? `${formatClock(actualEnd)} 종료` : `实际 ${formatClock(actualEnd)} 结束`;
-    if (button) { button.disabled = true; button.textContent = currentLanguage === "en" ? "Completed" : currentLanguage === "ko" ? "완료" : "已完成"; }
+    if (status) status.textContent = currentLanguage === "en" ? `Finished ${formatClock(actualEnd)}` : currentLanguage === "ko" ? `${formatClock(actualEnd)} 종료` : `实际 ${formatClock(actualEnd)} 已结束`;
+    if (button) { button.disabled = true; button.textContent = currentLanguage === "en" ? "Completed" : currentLanguage === "ko" ? "완료" : "已记录完成"; }
 
     const next = rows[stopIndex + 1];
+    if (mode === "recommend") {
+        const dayCard = panel.closest(".day-card");
+        refreshAllTripAlternativeSuggestions();
+        const suggestion = dayCard?.querySelector(".trip-alternative-box");
+        if (suggestion) suggestion.scrollIntoView({ behavior: "smooth", block: "center" });
+        const message = currentLanguage === "en" ? "Finish recorded. Choose an available alternative attraction below if you want to add one." : currentLanguage === "ko" ? "종료 시간을 기록했습니다. 아래에서 대체 관광지를 선택할 수 있습니다." : "已记录实际结束时间。你可以在下方选择推荐景点加入今天的行程。";
+        showSmartReminderMessage(message, "success");
+        if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+        return;
+    }
     if (!next) {
-        showSmartReminderMessage(currentLanguage === "en" ? "The last attraction is complete." : currentLanguage === "ko" ? "마지막 관광지를 완료했습니다." : "当天最后一个景点已完成。", "success");
+        const message = currentLanguage === "en" ? `Recorded actual finish time: ${formatClock(actualEnd)}. This was the last attraction today.` : currentLanguage === "ko" ? `실제 종료 시간 ${formatClock(actualEnd)}을 기록했습니다. 오늘 마지막 관광지입니다.` : `已记录实际结束时间 ${formatClock(actualEnd)}。这是今天最后一个景点。`;
+        showSmartReminderMessage(message, "success");
+        if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
         return;
     }
 
-    const originalNextStart = Number(next.dataset.start);
+    const oldNextStart = Number(next.dataset.start);
     const travel = Number(row.dataset.travel || 30);
-    const departureDeadline = originalNextStart - travel;
-    const mustLeaveNow = actualEnd >= departureDeadline;
-    // 只把实际到达时间晚于下一站原定开始时间的部分顺延，避免无谓地把整段交通时间重复加到日程中
-    const scheduleShift = Math.max(0, actualEnd + travel - originalNextStart);
+    const estimatedArrival = actualEnd + travel;
+    // 下一站不能早于实际到达时间；迟到多少，就把后续行程顺延多少。
+    // 提前结束时允许负数偏移；选择保持原计划则不改变时间。
+    const scheduleShift = mode === "keep" ? 0 : estimatedArrival - oldNextStart;
 
-    if (scheduleShift > 0) {
+    if (scheduleShift !== 0) {
         rows.slice(stopIndex + 1).forEach(nextRow => {
-            const start = Number(nextRow.dataset.start) + scheduleShift;
-            const end = Number(nextRow.dataset.end) + scheduleShift;
-            nextRow.dataset.start = start;
-            nextRow.dataset.end = end;
+            nextRow.dataset.start = String(Number(nextRow.dataset.start) + scheduleShift);
+            nextRow.dataset.end = String(Number(nextRow.dataset.end) + scheduleShift);
             const time = nextRow.querySelector(".smart-stop-time");
-            if (time) time.textContent = `${formatClock(start)} – ${formatClock(end)}`;
+            if (time) time.textContent = `${formatClock(Number(nextRow.dataset.start))} – ${formatClock(Number(nextRow.dataset.end))}`;
         });
-        // 同步顺延当前景点之后的所有行程卡片（餐饮、交通、景点和自由活动）
-        const currentCard = document.querySelector(`[data-smart-card="${panel.dataset.smartDay}-${stopIndex}"]`);
-        if (currentCard && currentCard.parentElement) {
+        const currentCard = panel.closest(".day-card")?.querySelector(`[data-smart-card="${day}-${stopIndex}"]`);
+        if (currentCard?.parentElement) {
             const siblings = [...currentCard.parentElement.children];
             const currentCardIndex = siblings.indexOf(currentCard);
             siblings.slice(currentCardIndex + 1).forEach(card => {
-                if (!card.classList || !card.classList.contains("place")) return;
+                if (!card.classList?.contains("place")) return;
                 const timeTitle = [...card.querySelectorAll(".place-title")].find(el => parseClockRange(el.textContent));
                 if (!timeTitle) return;
                 const oldRange = parseClockRange(timeTitle.textContent);
@@ -2400,26 +2434,40 @@ function finishSmartStop(day, stopIndex) {
         }
     }
 
-    if (mustLeaveNow) {
-        const nextName = next.dataset.name || (currentLanguage === "en" ? "the next stop" : currentLanguage === "ko" ? "다음 장소" : "下一个地点");
-        const title = currentLanguage === "en" ? "Departure reminder" : currentLanguage === "ko" ? "출발 알림" : "出发提醒";
-        const body = currentLanguage === "en"
-            ? `You finished at ${formatClock(actualEnd)}. Leave now for ${nextName}; estimated travel is ${travel} min.`
-            : currentLanguage === "ko"
-                ? `${formatClock(actualEnd)}에 종료했습니다. 다음 장소 ${nextName}(으)로 지금 출발하세요. 이동 약 ${travel}분.`
-                : `你在 ${formatClock(actualEnd)} 才结束当前行程。现在必须出发前往${nextName}，预计交通 ${travel} 分钟。`;
-        sendSmartNotification(title, body, `late-day-${day}-stop-${stopIndex}`);
-        smartReminderSent.add(`day-${day}-stop-${stopIndex}-${departureDeadline}`);
-        smartReminderSent.add(`day-${day}-stop-${stopIndex}-${Number(next.dataset.start) - travel}`);
-    } else if (delay > 0) {
-        showSmartReminderMessage(currentLanguage === "en"
-            ? `You are ${delay} min late, but there is still enough transfer time.`
-            : currentLanguage === "ko"
-                ? `${delay}분 지연되었지만 이동 시간은 아직 확보되어 있습니다.`
-                : `当前比计划晚 ${delay} 分钟，但仍有足够交通时间；后续日程已按预计到达时间校准。`, "warning");
-    } else {
-        showSmartReminderMessage(currentLanguage === "en" ? "Great! You are on schedule." : currentLanguage === "ko" ? "좋습니다! 일정대로 진행 중입니다." : "很好，目前没有延误。", "success");
+    // 清除本日旧提醒的去重标记，再按调整后的最新时间检查提醒。
+    for (const key of [...smartReminderSent]) {
+        if (key.startsWith(`day-${day}-`)) smartReminderSent.delete(key);
     }
+    refreshTripSmartStopRows(panel);
+
+    const newNextStart = Number(next.dataset.start);
+    const newLeaveAt = newNextStart - travel;
+    const newArrival = newNextStart;
+    const nextName = next.dataset.name || (currentLanguage === "en" ? "the next stop" : currentLanguage === "ko" ? "다음 장소" : "下一站");
+    let message;
+    if (scheduleShift !== 0) {
+        message = currentLanguage === "en"
+            ? (scheduleShift > 0 ? `You finished ${delay} min late. ${nextName} is rescheduled to ${formatClock(newNextStart)}; leave by ${formatClock(newLeaveAt)}. Later stops shifted ${scheduleShift} min later.` : `You finished early. ${nextName} is moved up to ${formatClock(newNextStart)}; later stops shifted ${Math.abs(scheduleShift)} min earlier.`)
+            : currentLanguage === "ko"
+                ? (scheduleShift > 0 ? `${delay}분 늦게 종료했습니다. ${nextName} 일정은 ${formatClock(newNextStart)}로 변경되고 이후 일정은 ${scheduleShift}분 늦춰졌습니다.` : `예정보다 일찍 종료했습니다. ${nextName} 일정은 ${formatClock(newNextStart)}로 앞당겨지고 이후 일정도 ${Math.abs(scheduleShift)}분 앞당겨졌습니다.`)
+                : (scheduleShift > 0
+                ? `你比原计划晚了 ${delay} 分钟。已将「${nextName}」调整为 ${formatClock(newNextStart)}，建议 ${formatClock(newLeaveAt)} 前出发；后续行程顺延 ${scheduleShift} 分钟。`
+                : `你提前结束了 ${Math.abs(scheduleShift)} 分钟。已将「${nextName}」提前到 ${formatClock(newNextStart)}，后续行程也提前了 ${Math.abs(scheduleShift)} 分钟。`);
+    } else {
+        message = currentLanguage === "en"
+            ? `Recorded ${formatClock(actualEnd)}. You can still reach ${nextName} on time; departure reminder remains ${formatClock(newLeaveAt)}.`
+            : currentLanguage === "ko"
+                ? `${formatClock(actualEnd)} 종료를 기록했습니다. ${nextName} 일정은 유지됩니다. ${formatClock(newLeaveAt)}까지 출발하세요.`
+                : `已记录实际结束时间 ${formatClock(actualEnd)}。目前仍能赶上「${nextName}」，提醒出发时间为 ${formatClock(newLeaveAt)}。`;
+    }
+    showSmartReminderMessage(message, scheduleShift > 0 ? "warning" : "success");
+    showSmartReminderPopup(
+        currentLanguage === "en" ? (scheduleShift > 0 ? "Itinerary updated" : "Finish time recorded") : currentLanguage === "ko" ? (scheduleShift > 0 ? "일정이 변경되었습니다" : "종료 시간이 기록되었습니다") : (scheduleShift !== 0 ? "后续行程已自动调整" : "已记录结束时间"),
+        message,
+        scheduleShift > 0 ? "urgent" : "success"
+    );
+    if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+    checkSmartDepartureDeadlines();
 }
 
 function checkSmartDepartureDeadlines() {
@@ -2430,15 +2478,21 @@ function checkSmartDepartureDeadlines() {
         if (Number(panel.dataset.smartDay) !== activeTripDay) return;
         const rows = [...panel.querySelectorAll("[data-smart-stop]")];
         rows.slice(0, -1).forEach((row, index) => {
+            if (row.dataset.completed === "true") return;
             const next = rows[index + 1];
-            const deadline = Number(next.dataset.start) - Number(row.dataset.travel || 30);
+            const travel = Number(row.dataset.travel || 30);
+            const deadline = Number(next.dataset.start) - travel;
             const key = `day-${panel.dataset.smartDay}-stop-${index}-${deadline}`;
-            if (minute >= deadline && minute < Number(next.dataset.start) && !smartReminderSent.has(key)) {
+            if (minute >= deadline && !smartReminderSent.has(key)) {
                 smartReminderSent.add(key);
-                const nextName = next.dataset.name || (currentLanguage === "en" ? "the next stop" : currentLanguage === "ko" ? "다음 장소" : "下一个地点");
+                const nextName = next.dataset.name || (currentLanguage === "en" ? "the next stop" : currentLanguage === "ko" ? "다음 장소" : "下一站");
+                const lateBy = Math.max(0, minute - deadline);
+                const body = minute >= Number(next.dataset.start)
+                    ? (currentLanguage === "en" ? `You are ${lateBy} min past the planned departure time. Leave for ${nextName} now; the schedule may need updating.` : currentLanguage === "ko" ? `예정 출발 시간보다 ${lateBy}분 늦었습니다. 지금 ${nextName}(으)로 출발하세요. 일정 조정이 필요할 수 있습니다.` : `已经超过计划出发时间 ${lateBy} 分钟。请尽快前往「${nextName}」，并点击当前景点的“标记为现在结束并调整后续”更新行程。`)
+                    : (currentLanguage === "en" ? `Leave now for ${nextName}; estimated travel is ${travel} min.` : currentLanguage === "ko" ? `${nextName}(으)로 지금 출발하세요. 이동 시간은 약 ${travel}분입니다.` : `现在该出发前往「${nextName}」了，预计交通 ${travel} 分钟。`);
                 sendSmartNotification(
-                    currentLanguage === "en" ? "Time to leave" : currentLanguage === "ko" ? "출발할 시간입니다" : "该出发了",
-                    currentLanguage === "en" ? `Leave now for ${nextName} to stay on schedule.` : currentLanguage === "ko" ? `${nextName}(으)로 지금 출발해야 일정에 맞출 수 있습니다.` : `现在出发前往${nextName}，才能尽量赶上原定行程。`,
+                    currentLanguage === "en" ? "Time to leave" : currentLanguage === "ko" ? "출발할 시간입니다" : "🔔 到出发时间了",
+                    body,
                     key
                 );
             }
@@ -2482,6 +2536,8 @@ function generatePlan(silent = false) {
 
     const cityData = travelData[finalCity];
     const attractions = Array.isArray(cityData.attractions) ? cityData.attractions : [];
+    currentTripEditContext = { city: finalCity, attractions, preferredTypes: [] };
+    tripRemovedAttractionNames = new Set();
     const foods = Array.isArray(cityData.foods) ? cityData.foods : [];
     // 读取当前地区的餐厅推荐
 const restaurants = Array.isArray(cityData.restaurants)
@@ -2498,6 +2554,7 @@ const restaurants = Array.isArray(cityData.restaurants)
             if (!preferredTypes.includes(type)) preferredTypes.push(type);
         });
     });
+    if (currentTripEditContext) currentTripEditContext.preferredTypes = preferredTypes.slice();
 
     if (routeMode === "custom" && customSelectedAttractionKeys.length === 0) {
         if (!silent) alert(currentLanguage === "en" ? "Please select at least one attraction for your custom route."
@@ -2786,8 +2843,11 @@ const nightRange = takeTimeRange(120);
             : `${escapeHTML(translateType(attraction.type))} · ${escapeHTML(T.duration)}: ${escapeHTML(translateTime(attraction.time))}`;
 
         return `
-            <div class="place" data-smart-card="${smartId}">
-                <div class="place-title" data-smart-card-time>${emoji} ${range}</div>
+            <div class="place trip-edit-attraction" data-smart-card="${smartId}" data-attraction-name="${escapeHTML(name)}">
+                <div class="trip-edit-card-heading">
+                    <div class="place-title" data-smart-card-time>${emoji} ${range}</div>
+                    <button type="button" class="trip-remove-button" aria-label="${currentLanguage === "en" ? "Remove attraction" : currentLanguage === "ko" ? "관광지 삭제" : "删除景点"}" onclick="removeTripAttraction(${Number(smartId.split("-")[0])}, ${Number(smartId.split("-")[1])})">×</button>
+                </div>
                 <div class="place-title">${escapeHTML(name)}</div>
                 
               
@@ -3002,7 +3062,7 @@ const dinnerLabel = currentLanguage === "en" ? "Dinner"
 )}
 
             ${attraction1 && attraction2 ? `
-                <div class="place">
+                <div class="place trip-route-transfer" data-route-transfer="true">
                     <div class="place-title">🚇 ${transferRange}</div>
                     <div class="place-title">${T.transport}</div>
                     <div class="place-info">${getTransferRoute(finalCity, attraction1.name, attraction2.name)}</div>
@@ -3011,7 +3071,7 @@ const dinnerLabel = currentLanguage === "en" ? "Dinner"
 
             ${attractionCard(attraction2, attraction2Range, "📷", `${day}-1`)}
             ${attraction2 && attraction3 ? `
-    <div class="place">
+    <div class="place trip-route-transfer" data-route-transfer="true">
         <div class="place-title">🚇 ${transfer2Range}</div>
         <div class="place-title">${T.transport}</div>
         <div class="place-info">${getTransferRoute(finalCity, attraction2.name, attraction3.name)}</div>
@@ -3075,6 +3135,8 @@ resultHTML += `
 
 if (result) {
     result.innerHTML = resultHTML;
+    // 每一天在行程首次显示时都提供替代景点，不必先删除景点才出现。
+    refreshAllTripAlternativeSuggestions();
     initializeTravelRouteMap();
     startSmartReminderClock();
     renderLiveLocationPanel();
@@ -3105,6 +3167,205 @@ if (result) {
 
     if (!silent && result) result.scrollIntoView({ behavior: "smooth" });
 }
+// ============================================================
+// 旅途中编辑路线：删除景点、重算后续时间、推荐并加入替代景点
+// 时间按当前行程的估算规则计算：景点游玩时长 + 每段交通30分钟。
+// ============================================================
+function shiftTripPlaceTimes(placeElements, deltaMinutes) {
+    if (!deltaMinutes) return;
+    placeElements.forEach(card => {
+        const timeNode = [...card.querySelectorAll(".place-title")].find(node => parseClockRange(node.textContent));
+        if (!timeNode) return;
+        const range = parseClockRange(timeNode.textContent);
+        const nextRange = `${formatClock(range.start + deltaMinutes)} - ${formatClock(range.end + deltaMinutes)}`;
+        timeNode.textContent = timeNode.textContent.replace(/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/, nextRange);
+    });
+}
+
+function refreshTripSmartStopRows(panel) {
+    if (!panel) return;
+    const rows = [...panel.querySelectorAll("[data-smart-stop]")];
+    rows.forEach((row, index) => {
+        row.dataset.stop = String(index);
+        const next = rows[index + 1];
+        row.dataset.nextName = next?.dataset.name || "";
+        const nextText = row.querySelector(".smart-stop-next");
+        if (next) {
+            const name = next.dataset.name || "";
+            const leaveAt = Number(next.dataset.start) - Number(row.dataset.travel || 30);
+            if (nextText) nextText.textContent = currentLanguage === "en" ? `Next: ${name} · estimated travel 30 min` : currentLanguage === "ko" ? `다음 장소: ${name} · 이동 약 30분` : `下一站：${name} · 预计交通 30 分钟`;
+            else {
+                const p = document.createElement("p");
+                p.className = "smart-stop-next";
+                p.textContent = currentLanguage === "en" ? `Next: ${name} · estimated travel 30 min` : currentLanguage === "ko" ? `다음 장소: ${name} · 이동 약 30분` : `下一站：${name} · 预计交通 30 分钟`;
+                row.querySelector(".smart-stop-main")?.after(p);
+            }
+            let departure = row.querySelector(".smart-stop-departure");
+            if (!departure) { departure = document.createElement("p"); departure.className = "smart-stop-departure"; row.querySelector(".smart-stop-next")?.after(departure); }
+            departure.textContent = currentLanguage === "en" ? `Departure reminder: ${formatClock(leaveAt)}` : currentLanguage === "ko" ? `출발 알림 예정: ${formatClock(leaveAt)}` : `🔔 预计 ${formatClock(leaveAt)} 提醒你出发`;
+        } else {
+            if (nextText) nextText.remove();
+            row.querySelector(".smart-stop-departure")?.remove();
+        }
+    });
+    rows.forEach((row, index) => {
+        const button = row.querySelector(".smart-finish-button");
+        if (button) button.setAttribute("onclick", `finishSmartStop(${panel.dataset.smartDay}, ${index})`);
+    });
+}
+
+function getTripUsedAttractionNames() {
+    return new Set([...document.querySelectorAll("[data-smart-stop]")].map(row => String(row.dataset.name || "").trim().toLowerCase()));
+}
+
+function refreshAllTripAlternativeSuggestions() {
+    document.querySelectorAll("[data-smart-day]").forEach(panel => {
+        const dayCard = panel.closest(".day-card");
+        if (!dayCard) return;
+        const day = Number(panel.dataset.smartDay);
+        renderTripAlternativeSuggestions(day, dayCard);
+    });
+}
+
+function renderTripAlternativeSuggestions(day, dayCard) {
+    if (!currentTripEditContext || !dayCard) return;
+    let box = dayCard.querySelector(".trip-alternative-box");
+    if (!box) {
+        box = document.createElement("section");
+        box.className = "trip-alternative-box";
+        dayCard.appendChild(box);
+    }
+    const used = getTripUsedAttractionNames();
+    const candidates = currentTripEditContext.attractions
+        .map((attraction, index) => ({ attraction, index }))
+        .filter(({ attraction }) => {
+            const name = getText(attraction.name).trim().toLowerCase();
+            return name && !used.has(name) && !tripRemovedAttractionNames.has(name) && !attraction.isGenericActivity;
+        })
+        .sort((a, b) => {
+            const preferred = currentTripEditContext.preferredTypes || [];
+            return Number(preferred.includes(a.attraction.type)) - Number(preferred.includes(b.attraction.type));
+        })
+        .slice(0, 4);
+    if (!candidates.length) {
+        box.innerHTML = `<strong>${currentLanguage === "en" ? "No more unused attractions" : currentLanguage === "ko" ? "추가 추천 관광지가 없습니다" : "暂时没有其他未安排的景点"}</strong>`;
+        return;
+    }
+    box.innerHTML = `
+      <div class="trip-alternative-heading">✨ ${currentLanguage === "en" ? "Alternative attractions" : currentLanguage === "ko" ? "대체 관광지 추천" : "为你推荐其他景点"}</div>
+      <p>${currentLanguage === "en" ? "Choose one to add to this day's route." : currentLanguage === "ko" ? "선택하면 오늘 일정에 추가됩니다." : "选择一个景点，即可加入当天路线。"}</p>
+      <div class="trip-alternative-list">${candidates.map(({ attraction, index }) => `
+        <div class="trip-alternative-item">
+          <div><strong>${escapeHTML(getText(attraction.name))}</strong><small>${escapeHTML(translateType(attraction.type))} · ${escapeHTML(translateTime(attraction.time))}</small></div>
+          <button type="button" onclick="addRecommendedTripAttraction(${day}, ${index})">${currentLanguage === "en" ? "Add" : currentLanguage === "ko" ? "추가" : "加入行程"}</button>
+        </div>`).join("")}</div>`;
+}
+
+function removeTripAttraction(day, stopIndex) {
+    const panel = document.querySelector(`[data-smart-day="${day}"]`);
+    const dayCard = panel?.closest(".day-card");
+    if (!panel || !dayCard) return;
+    const rows = [...panel.querySelectorAll("[data-smart-stop]")];
+    const row = rows[stopIndex];
+    const card = dayCard.querySelector(`[data-smart-card="${day}-${stopIndex}"]`);
+    if (!row || !card) return;
+    const name = row.dataset.name || "";
+    tripRemovedAttractionNames.add(name.trim().toLowerCase());
+    const range = parseClockRange(`${formatClock(Number(row.dataset.start))} - ${formatClock(Number(row.dataset.end))}`);
+    const duration = range ? Math.max(0, range.end - range.start) : 0;
+    const cards = [...dayCard.querySelectorAll(":scope > .place")];
+    const cardIndex = cards.indexOf(card);
+    const after = cards.slice(cardIndex + 1);
+    const nextTransfer = after.find(item => item.hasAttribute("data-route-transfer"));
+    const previousTransfer = cards.slice(0, cardIndex).reverse().find(item => item.hasAttribute("data-route-transfer"));
+    const transferToRemove = stopIndex === 0 ? (nextTransfer || previousTransfer) : (previousTransfer || nextTransfer);
+    if (transferToRemove) transferToRemove.remove();
+    const shift = duration + (transferToRemove ? 30 : 0);
+    const followingCards = cards.slice(cardIndex + 1).filter(item => item !== transferToRemove && item.isConnected);
+    card.remove();
+    row.remove();
+    shiftTripPlaceTimes(followingCards, -shift);
+
+    // 同步更新后续景点的计划时间及卡片索引，提醒逻辑继续使用最新时间。
+    const remainingRows = [...panel.querySelectorAll("[data-smart-stop]")];
+    remainingRows.forEach((item, index) => {
+        const start = Number(item.dataset.start);
+        const end = Number(item.dataset.end);
+        if (index >= stopIndex) {
+            item.dataset.start = String(start - shift);
+            item.dataset.end = String(end - shift);
+            const time = item.querySelector(".smart-stop-time");
+            if (time) time.textContent = `${formatClock(start - shift)} – ${formatClock(end - shift)}`;
+        }
+    });
+    remainingRows.forEach((item, index) => {
+        const oldName = item.dataset.name;
+        item.dataset.stop = String(index);
+        const smartCard = dayCard.querySelector(`[data-smart-card="${day}-${index >= stopIndex ? index + 1 : index}"]`);
+        if (smartCard) {
+            smartCard.dataset.smartCard = `${day}-${index}`;
+            const removeButton = smartCard.querySelector(".trip-remove-button");
+            if (removeButton) removeButton.setAttribute("onclick", `removeTripAttraction(${day}, ${index})`);
+        }
+        item.dataset.name = oldName;
+    });
+    refreshTripSmartStopRows(panel);
+    refreshAllTripAlternativeSuggestions();
+    if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+    showSmartReminderMessage(currentLanguage === "en" ? `${name} removed. The remaining schedule has been recalculated.` : currentLanguage === "ko" ? `${name} 관광지를 삭제하고 이후 일정을 다시 계산했습니다.` : `已删除「${name}」，后续行程时间已重新计算。`, "success");
+}
+
+function addRecommendedTripAttraction(day, attractionIndex) {
+    const attraction = currentTripEditContext?.attractions?.[attractionIndex];
+    const panel = document.querySelector(`[data-smart-day="${day}"]`);
+    const dayCard = panel?.closest(".day-card");
+    if (!attraction || !panel || !dayCard) return;
+    const rows = [...panel.querySelectorAll("[data-smart-stop]")];
+    if (rows.length >= 3) {
+        showSmartReminderMessage(currentLanguage === "en" ? "This day already has three attractions." : currentLanguage === "ko" ? "하루에 관광지 3곳이 이미 배정되어 있습니다." : "当天最多安排 3 个景点，请先删除一个再添加。", "warning");
+        return;
+    }
+    const name = getText(attraction.name).trim();
+    if (getTripUsedAttractionNames().has(name.toLowerCase())) return;
+    const last = rows[rows.length - 1];
+    const start = last ? Number(last.dataset.end) + 30 : 9 * 60;
+    const duration = Math.max(30, durationToMinutes(attraction.time) || 120);
+    const end = start + duration;
+    const list = panel.querySelector(".smart-stop-list");
+    const index = rows.length;
+    const row = document.createElement("div");
+    row.className = "smart-stop-row";
+    row.dataset.smartStop = ""; row.dataset.day = String(day); row.dataset.stop = String(index);
+    row.dataset.start = String(start); row.dataset.end = String(end); row.dataset.name = name; row.dataset.nextName = ""; row.dataset.travel = "30";
+    row.innerHTML = `<div class="smart-stop-main"><span class="smart-stop-time">${formatClock(start)} – ${formatClock(end)}</span><strong>${escapeHTML(name)}</strong><span class="smart-stop-status">${currentLanguage === "en" ? "Scheduled" : currentLanguage === "ko" ? "예정" : "计划中"}</span></div><button type="button" class="smart-finish-button" onclick="finishSmartStop(${day}, ${index})">${currentLanguage === "en" ? "Mark finished now" : currentLanguage === "ko" ? "지금 종료로 기록" : "标记为现在结束"}</button>`;
+    list?.appendChild(row);
+
+    // 新景点插入自由活动之前，并把其后的项目顺延。
+    const placeCards = [...dayCard.querySelectorAll(":scope > .place")];
+    const freeCard = placeCards.find(item => item.textContent.includes("☕"));
+    const transferMinutes = last ? 30 : 0;
+    const shift = transferMinutes + duration;
+    const following = freeCard ? placeCards.slice(placeCards.indexOf(freeCard)) : [];
+    shiftTripPlaceTimes(following, shift);
+    const transfer = document.createElement("div");
+    transfer.className = "place trip-route-transfer"; transfer.dataset.routeTransfer = "true";
+    transfer.innerHTML = `<div class="place-title">🚇 ${formatClock(start - transferMinutes)} - ${formatClock(start)}</div><div class="place-title">${currentLanguage === "en" ? "Transfer" : currentLanguage === "ko" ? "이동" : "交通"}</div><div class="place-info">${currentLanguage === "en" ? "Estimated transfer time: 30 minutes." : currentLanguage === "ko" ? "예상 이동 시간: 30분." : "预计交通时间：30 分钟。"}</div>`;
+    const newCard = document.createElement("div");
+    newCard.className = "place trip-edit-attraction"; newCard.dataset.smartCard = `${day}-${index}`; newCard.dataset.attractionName = name;
+    newCard.innerHTML = `<div class="trip-edit-card-heading"><div class="place-title" data-smart-card-time>📍 ${formatClock(start)} - ${formatClock(end)}</div><button type="button" class="trip-remove-button" aria-label="删除景点" onclick="removeTripAttraction(${day}, ${index})">×</button></div><div class="place-title">${escapeHTML(name)}</div><div class="place-info">${escapeHTML(translateType(attraction.type))} · ${escapeHTML(translateTime(attraction.time))}</div><div class="place-info">${escapeHTML(getText(attraction.description))}</div>`;
+    if (freeCard) {
+        if (last) dayCard.insertBefore(transfer, freeCard);
+        dayCard.insertBefore(newCard, freeCard);
+    } else {
+        if (last) dayCard.appendChild(transfer);
+        dayCard.appendChild(newCard);
+    }
+    refreshTripSmartStopRows(panel);
+    refreshAllTripAlternativeSuggestions();
+    if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+    showSmartReminderMessage(currentLanguage === "en" ? `${name} added. The rest of the day has been rescheduled.` : currentLanguage === "ko" ? `${name} 관광지를 추가하고 이후 일정을 조정했습니다.` : `已加入「${name}」，当天后续时间已重新安排。`, "success");
+}
+
 // 地图在行程 HTML 插入后才初始化；手机端容器尺寸变化后重新计算 Leaflet 画布
 let travelRouteMapInstance = null;
 
