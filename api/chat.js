@@ -59,8 +59,15 @@ module.exports = async function handler(req, res) {
     itinerary: String(context.itinerary || "").slice(0, 10000)
   };
 
+  const languageRule = context.language === "ko"
+    ? "언어 규칙: 모든 답변은 자연스러운 한국어로만 작성하세요. 사용자가 중국어 또는 영어로 질문하더라도 한국어로 답하세요. 중국어 문장이나 중국어 설명을 절대 섞지 마세요. 고유명사와 장소 이름은 필요한 경우 원어를 괄호 안에 병기할 수 있습니다."
+    : context.language === "en"
+      ? "Language rule: Write the entire answer in English, even if the user asks in another language. Do not mix in Chinese or Korean."
+      : "语言规则：全部使用简体中文回答，即使用户用其他语言提问，也不要混用韩语或英语。";
   const instructions = [
-    `You are the friendly, polished AI travel concierge inside a multilingual travel-planning app. Always reply in ${language}.`,
+    `You are the friendly, polished AI travel concierge inside a multilingual travel-planning app. The selected app language is ${language}.`,
+    languageRule,
+    "The selected app language is a strict output requirement and takes priority over the language used in the user's message and previous conversation turns.",
     "Be practical, warm, concise, and well-structured. Prefer clear steps and realistic time estimates.",
     "Use the current trip context when relevant. If key details are missing, ask one concise follow-up question rather than inventing them.",
     "Never claim to know live traffic, current weather, opening hours, ticket prices, reservations, or real-time availability unless the user supplied that information. Clearly label estimates and ask the traveler to verify time-sensitive details.",

@@ -4474,7 +4474,7 @@ function toggleLiveLocation() {
 // -------------------------
 function initializeTravelGuide() {
     renderLiveLocationPanel();
-    initializeAiAssistant();
+    // AI 助手在文件末尾完成定义后再初始化，避免提前访问尚未初始化的 const 文案配置。
     if (currentLanguage !== "zh") changeLanguage(currentLanguage);
     renderSavedList();
     updateRouteModeLabels();
@@ -4508,6 +4508,7 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 // ============================================================
 let aiChatHistory = [];
 let aiChatBusy = false;
+let aiChatHistoryLanguage = currentLanguage;
 const AI_CHAT_ENDPOINT = location.protocol === "capacitor:" || location.protocol === "file:"
     ? "https://travel-planner-mauve-six.vercel.app/api/chat"
     : "/api/chat";
@@ -4543,6 +4544,8 @@ function renderAiAssistantLanguage() {
   const t = aiAssistantCopy[currentLanguage] || aiAssistantCopy.zh;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
   set("aiLauncherLabel", t.launcher); set("aiHeaderTitle", t.title); set("aiHeaderSubtitle", t.subtitle);
+  const sendButton = document.getElementById("aiChatSend");
+  if (sendButton) { sendButton.setAttribute("aria-label", t.send); sendButton.setAttribute("title", t.send); }
   set("aiContextLine", currentPlan ? t.context : t.contextEmpty); set("aiWelcomeMessage", t.welcome);
   set("aiDisclaimer", t.disclaimer);
   const input = document.getElementById("aiChatInput"); if (input) input.placeholder = t.placeholder;
@@ -4594,6 +4597,8 @@ async function sendAiChatMessage(rawText) {
   const t = aiAssistantCopy[currentLanguage] || aiAssistantCopy.zh;
   if (!text) { appendAiChatMessage("assistant", t.empty); return; }
   if (aiChatBusy) return;
+  // Do not let messages from a previous UI language influence the new language.
+  if (aiChatHistoryLanguage !== currentLanguage) { aiChatHistory = []; aiChatHistoryLanguage = currentLanguage; }
   const input = document.getElementById("aiChatInput"); if (input) input.value = "";
   appendAiChatMessage("user", text);
   aiChatHistory.push({ role: "user", content: text });
@@ -4622,3 +4627,6 @@ async function sendAiChatMessage(rawText) {
     input?.focus();
   }
 }
+
+// AI 助手配置与发送函数均已定义，现在安全地绑定聊天事件。
+initializeAiAssistant();
