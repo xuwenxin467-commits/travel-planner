@@ -40,8 +40,15 @@ const smartReminderSent = new Set();
 const smartScheduleRegistry = {};
 
 // 当前网站语言：zh 中文，ko 韩语，en 英语
-let currentLanguage = "zh";
-let isKorean = false; // 兼容页面中可能仍在使用 isKorean 的旧代码
+let currentLanguage = (() => {
+    try {
+        const saved = localStorage.getItem("travelPlannerLanguage");
+        return ["zh", "ko", "en"].includes(saved) ? saved : "zh";
+    } catch (error) {
+        return "zh";
+    }
+})();
+let isKorean = currentLanguage === "ko"; // 兼容页面中可能仍在使用 isKorean 的旧代码
 
 const preferenceTypeMap = {
     "美食": [],
@@ -2289,20 +2296,96 @@ function smartSchedulePanel(day, stops) {
     </section>`;
 }
 
-function enableSmartNotifications() {
-    // 微信内置浏览器及部分 iPhone 浏览器不可靠支持系统通知；改用网页内弹窗。
-    showSmartReminderMessage(
-        currentLanguage === "en" ? "Page alerts are enabled. Keep this page open during your trip." :
-        currentLanguage === "ko" ? "페이지 알림이 켜졌습니다. 여행 중 이 페이지를 열어 두세요." :
-        "页面弹窗提醒已开启。旅行期间请保持这个网页打开。",
-        "success"
-    );
-    showSmartReminderPopup(
-        currentLanguage === "en" ? "Page alerts enabled" : currentLanguage === "ko" ? "페이지 알림 켜짐" : "页面提醒已开启",
-        currentLanguage === "en" ? "When it is time to leave, a reminder will appear in this page. Keep the page open." : currentLanguage === "ko" ? "출발 시간이 되면 이 페이지에 알림 창이 표시됩니다. 페이지를 열어 두세요." : "到该出发的时间时，网页会弹出醒目的提醒。请保持网页打开。",
-        "success"
-    );
+
+async function enableSmartNotifications() {
+    try {
+        // 检查手机通知插件是否正常加载
+        const notifications = window.LocalNotifications;
+
+        if (!notifications) {
+            showSmartReminderMessage(
+                currentLanguage === "en"
+                    ? "Phone notifications are unavailable."
+                    : currentLanguage === "ko"
+                        ? "휴대폰 알림 기능을 사용할 수 없습니다."
+                        : "手机通知功能尚未加载，请重新打开 App。",
+                "warning"
+            );
+            return;
+        }
+
+        // 检查通知权限
+        let permission = await notifications.checkPermissions();
+
+        // 如果还没有授权，就向用户申请
+        if (permission.display !== "granted") {
+            permission = await notifications.requestPermissions();
+        }
+
+        // 用户允许通知
+        if (permission.display === "granted") {
+            localStorage.setItem("smartPhoneNotificationsEnabled", "true");
+
+        // 检查 Android 精确闹钟权限
+        let exactPermission = await notifications.checkExactNotificationSetting();
+
+        // 如果没有开启，跳转到手机设置页面
+        if (exactPermission.exact_alarm !== "granted") {
+            exactPermission = await notifications.changeExactNotificationSetting();
+        }
+
+        if (exactPermission.exact_alarm !== "granted") {
+            console.warn("精确闹钟权限未开启，提醒时间可能延迟。");
+        }
+
+    await scheduleSmartDepartureNotifications();
+
+            showSmartReminderMessage(
+                currentLanguage === "en"
+                    ? "Phone notification permission enabled."
+                    : currentLanguage === "ko"
+                        ? "휴대폰 알림 권한이 허용되었습니다."
+                        : "手机通知权限已开启。",
+                "success"
+            );
+
+            showSmartReminderPopup(
+                currentLanguage === "en"
+                    ? "Phone notifications enabled"
+                    : currentLanguage === "ko"
+                        ? "휴대폰 알림 켜짐"
+                        : "手机通知权限已开启",
+                currentLanguage === "en"
+                    ? "Permission is enabled. Departure reminders can now be scheduled."
+                    : currentLanguage === "ko"
+                        ? "알림 권한이 허용되었습니다. 출발 알림을 예약할 수 있습니다."
+                        : "通知权限已经开启，接下来可以安排景点出发提醒。",
+                "success"
+            );
+        } else {
+            showSmartReminderMessage(
+                currentLanguage === "en"
+                    ? "Notification permission was not granted. Please enable it in phone settings."
+                    : currentLanguage === "ko"
+                        ? "알림 권한이 허용되지 않았습니다. 휴대폰 설정에서 켜 주세요."
+                        : "你没有允许通知，请在手机设置中开启通知权限。",
+                "warning"
+            );
+        }
+    } catch (error) {
+        console.error("手机通知权限申请失败：", error);
+
+        showSmartReminderMessage(
+            currentLanguage === "en"
+                ? "Unable to enable phone notifications."
+                : currentLanguage === "ko"
+                    ? "휴대폰 알림을 켤 수 없습니다."
+                    : "开启手机通知失败，请检查 App 是否正常运行。",
+            "warning"
+        );
+    }
 }
+
 
 function showSmartReminderPopup(title, body, type = "urgent") {
     let overlay = document.getElementById("smartReminderPopup");
@@ -2357,7 +2440,13 @@ function finishSmartStop(day, stopIndex, mode) {
             chooser = document.createElement("div");
             chooser.id = "smartFinishChoice";
             chooser.className = "smart-reminder-overlay";
-            chooser.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🕒</div><h2>这个景点已结束</h2><p>你想如何安排后续行程？</p><button type="button" data-finish-mode="advance">立即前往下一站（自动调整时间）</button><button type="button" data-finish-mode="keep">保持原定时间（自由活动）</button><button type="button" data-finish-mode="recommend">看看能否增加一个景点</button><button type="button" data-finish-mode="cancel" class="smart-finish-cancel">暂不操作</button></div>`;
+            const finishChoiceText = {
+                zh: { title: "这个景点已结束", prompt: "你想如何安排后续行程？", advance: "立即前往下一站（自动调整时间）", keep: "保持原定时间（自由活动）", recommend: "看看能否增加一个景点", cancel: "暂不操作" },
+                ko: { title: "이 관광이 종료되었습니다", prompt: "이후 일정을 어떻게 진행하시겠습니까?", advance: "다음 장소로 바로 이동 (일정 자동 조정)", keep: "기존 일정 유지 (자유 시간)", recommend: "대체 관광지 추가하기", cancel: "취소" },
+                en: { title: "This attraction is finished", prompt: "How would you like to continue your itinerary?", advance: "Go to the next stop now (adjust schedule automatically)", keep: "Keep the original schedule (free time)", recommend: "Find another attraction to add", cancel: "Not now" }
+            };
+            const labels = finishChoiceText[currentLanguage] || finishChoiceText.zh;
+            chooser.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🕒</div><h2>${labels.title}</h2><p>${labels.prompt}</p><button type="button" data-finish-mode="advance">${labels.advance}</button><button type="button" data-finish-mode="keep">${labels.keep}</button><button type="button" data-finish-mode="recommend">${labels.recommend}</button><button type="button" data-finish-mode="cancel" class="smart-finish-cancel">${labels.cancel}</button></div>`;
             document.body.appendChild(chooser);
             chooser.addEventListener("click", event => {
                 if (event.target === chooser) chooser.remove();
@@ -2387,23 +2476,57 @@ function finishSmartStop(day, stopIndex, mode) {
     if (status) status.textContent = currentLanguage === "en" ? `Finished ${formatClock(actualEnd)}` : currentLanguage === "ko" ? `${formatClock(actualEnd)} 종료` : `实际 ${formatClock(actualEnd)} 已结束`;
     if (button) { button.disabled = true; button.textContent = currentLanguage === "en" ? "Completed" : currentLanguage === "ko" ? "완료" : "已记录完成"; }
 
-    const next = rows[stopIndex + 1];
-    if (mode === "recommend") {
-        const dayCard = panel.closest(".day-card");
-        refreshAllTripAlternativeSuggestions();
-        const suggestion = dayCard?.querySelector(".trip-alternative-box");
-        if (suggestion) suggestion.scrollIntoView({ behavior: "smooth", block: "center" });
-        const message = currentLanguage === "en" ? "Finish recorded. Choose an available alternative attraction below if you want to add one." : currentLanguage === "ko" ? "종료 시간을 기록했습니다. 아래에서 대체 관광지를 선택할 수 있습니다." : "已记录实际结束时间。你可以在下方选择推荐景点加入今天的行程。";
-        showSmartReminderMessage(message, "success");
-        if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
-        return;
+    
+const next = rows[stopIndex + 1];
+
+if (mode === "recommend") {
+    const dayCard = panel.closest(".day-card");
+    refreshAllTripAlternativeSuggestions();
+
+    const suggestion = dayCard?.querySelector(".trip-alternative-box");
+    if (suggestion) {
+        suggestion.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    if (!next) {
-        const message = currentLanguage === "en" ? `Recorded actual finish time: ${formatClock(actualEnd)}. This was the last attraction today.` : currentLanguage === "ko" ? `실제 종료 시간 ${formatClock(actualEnd)}을 기록했습니다. 오늘 마지막 관광지입니다.` : `已记录实际结束时间 ${formatClock(actualEnd)}。这是今天最后一个景点。`;
-        showSmartReminderMessage(message, "success");
-        if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
-        return;
+
+    const message = currentLanguage === "en"
+        ? "Finish recorded. Choose an available alternative attraction below if you want to add one."
+        : currentLanguage === "ko"
+            ? "종료 시간을 기록했습니다. 아래에서 대체 관광지를 선택할 수 있습니다."
+            : "已记录实际结束时间。你可以在下方选择推荐景点加入今天的行程。";
+
+    showSmartReminderMessage(message, "success");
+
+    if (currentPlan) {
+        currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
     }
+
+    if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
+        scheduleSmartDepartureNotifications();
+    }
+
+    return;
+}
+
+if (!next) {
+    if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
+        scheduleSmartDepartureNotifications();
+    }
+
+    const message = currentLanguage === "en"
+        ? `Recorded actual finish time: ${formatClock(actualEnd)}. This was the last attraction today.`
+        : currentLanguage === "ko"
+            ? `실제 종료 시간 ${formatClock(actualEnd)}을 기록했습니다. 오늘 마지막 관광지입니다.`
+            : `已记录实际结束时间 ${formatClock(actualEnd)}。这是今天最后一个景点。`;
+
+    showSmartReminderMessage(message, "success");
+
+    if (currentPlan) {
+        currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+    }
+
+    return;
+}
+
 
     const oldNextStart = Number(next.dataset.start);
     const travel = Number(row.dataset.travel || 30);
@@ -2466,9 +2589,129 @@ function finishSmartStop(day, stopIndex, mode) {
         message,
         scheduleShift > 0 ? "urgent" : "success"
     );
-    if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
-    checkSmartDepartureDeadlines();
+    if (currentPlan) {
+    currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
 }
+
+if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
+    scheduleSmartDepartureNotifications();
+}
+
+checkSmartDepartureDeadlines();
+}
+
+// 自动安排 Android 手机的景点出发通知
+async function scheduleSmartDepartureNotifications() {
+    try {
+        const notifications = window.LocalNotifications;
+
+        if (!notifications) {
+            console.warn("手机通知插件尚未加载");
+            return;
+        }
+
+        // 检查通知权限
+        let permission = await notifications.checkPermissions();
+
+        if (permission.display !== "granted") {
+            console.warn("尚未获得手机通知权限");
+            return;
+        }
+
+        // 获取旅行开始日期
+        const dateInput = document.getElementById("tripStartDate");
+
+        if (!dateInput || !dateInput.value) {
+            console.warn("请先设置旅行开始日期");
+            return;
+        }
+
+        const startDate = new Date(`${dateInput.value}T00:00:00`);
+        const now = new Date();
+
+        // 只取消本功能之前安排的通知
+        const pending = await notifications.getPending();
+
+        const oldNotifications = (pending.notifications || [])
+            .filter(item => item.id >= 700000 && item.id < 800000)
+            .map(item => ({ id: item.id }));
+
+        if (oldNotifications.length) {
+            await notifications.cancel({
+                notifications: oldNotifications
+            });
+        }
+
+        const newNotifications = [];
+
+        document.querySelectorAll("[data-smart-day]").forEach(panel => {
+            const day = Number(panel.dataset.smartDay);
+            const rows = [...panel.querySelectorAll("[data-smart-stop]")];
+
+            rows.slice(0, -1).forEach((row, index) => {
+                const next = rows[index + 1];
+
+                if (
+                    row.dataset.completed === "true" ||
+                    next.dataset.completed === "true"
+                ) {
+                    return;
+                }
+
+                const travel = Number(row.dataset.travel || 30);
+                const deadline = Number(next.dataset.start) - travel;
+
+                // 计算该旅行日的提醒日期，自动处理跨午夜的时间
+                const reminderDate = new Date(startDate);
+                reminderDate.setDate(startDate.getDate() + day - 1);
+                reminderDate.setHours(0, 0, 0, 0);
+                reminderDate.setMinutes(deadline);
+
+                // 只安排未来的提醒
+                if (reminderDate <= now) return;
+
+                const nextName = next.dataset.name || "下一站";
+
+                const title =
+                    currentLanguage === "en"
+                        ? "Time to leave"
+                        : currentLanguage === "ko"
+                            ? "출발할 시간입니다"
+                            : "🔔 到出发时间了";
+
+                const body =
+                    currentLanguage === "en"
+                        ? `Leave now for ${nextName}; estimated travel is ${travel} min.`
+                        : currentLanguage === "ko"
+                            ? `${nextName}(으)로 지금 출발하세요. 이동 시간은 약 ${travel}분입니다.`
+                            : `现在该出发前往「${nextName}」了，预计交通 ${travel} 分钟。`;
+
+                newNotifications.push({
+                    id: 700000 + day * 100 + index,
+                    title,
+                    body,
+                    schedule: {
+                        at: reminderDate,
+                        allowWhileIdle: true
+                    },
+                    isExactNotification: true
+                });
+            });
+        });
+
+        if (newNotifications.length) {
+            await notifications.schedule({
+                notifications: newNotifications
+            });
+        }
+
+        console.log(`已安排 ${newNotifications.length} 条手机出发提醒`);
+
+    } catch (error) {
+        console.error("安排手机出发提醒失败：", error);
+    }
+}
+
 
 function checkSmartDepartureDeadlines() {
     const now = new Date();
@@ -3139,6 +3382,9 @@ if (result) {
     refreshAllTripAlternativeSuggestions();
     initializeTravelRouteMap();
     startSmartReminderClock();
+    if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
+    scheduleSmartDepartureNotifications();
+}
     renderLiveLocationPanel();
 
     // 加载景点照片
@@ -3363,6 +3609,9 @@ function addRecommendedTripAttraction(day, attractionIndex) {
     refreshTripSmartStopRows(panel);
     refreshAllTripAlternativeSuggestions();
     if (currentPlan) currentPlan.html = document.getElementById("result")?.innerHTML || currentPlan.html;
+    if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
+        scheduleSmartDepartureNotifications();
+}
     showSmartReminderMessage(currentLanguage === "en" ? `${name} added. The rest of the day has been rescheduled.` : currentLanguage === "ko" ? `${name} 관광지를 추가하고 이후 일정을 조정했습니다.` : `已加入「${name}」，当天后续时间已重新安排。`, "success");
 }
 
@@ -3618,6 +3867,7 @@ function changeLanguage(language) {
 
     currentLanguage = language;
     isKorean = currentLanguage === "ko";
+    try { localStorage.setItem("travelPlannerLanguage", currentLanguage); } catch (error) { /* storage may be unavailable */ }
 
     const translations = {
         zh: {
