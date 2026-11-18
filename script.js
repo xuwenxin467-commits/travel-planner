@@ -40,15 +40,8 @@ const smartReminderSent = new Set();
 const smartScheduleRegistry = {};
 
 // 当前网站语言：zh 中文，ko 韩语，en 英语
-let currentLanguage = (() => {
-    try {
-        const saved = localStorage.getItem("travelPlannerLanguage");
-        return ["zh", "ko", "en"].includes(saved) ? saved : "zh";
-    } catch (error) {
-        return "zh";
-    }
-})();
-let isKorean = currentLanguage === "ko"; // 兼容页面中可能仍在使用 isKorean 的旧代码
+let currentLanguage = (() => { const saved = localStorage.getItem("travelPlannerLanguage"); return ["zh", "ko", "en"].includes(saved) ? saved : "zh"; })();
+let isKorean = false; // 兼容页面中可能仍在使用 isKorean 的旧代码
 
 const preferenceTypeMap = {
     "美食": [],
@@ -2440,13 +2433,7 @@ function finishSmartStop(day, stopIndex, mode) {
             chooser = document.createElement("div");
             chooser.id = "smartFinishChoice";
             chooser.className = "smart-reminder-overlay";
-            const finishChoiceText = {
-                zh: { title: "这个景点已结束", prompt: "你想如何安排后续行程？", advance: "立即前往下一站（自动调整时间）", keep: "保持原定时间（自由活动）", recommend: "看看能否增加一个景点", cancel: "暂不操作" },
-                ko: { title: "이 관광이 종료되었습니다", prompt: "이후 일정을 어떻게 진행하시겠습니까?", advance: "다음 장소로 바로 이동 (일정 자동 조정)", keep: "기존 일정 유지 (자유 시간)", recommend: "대체 관광지 추가하기", cancel: "취소" },
-                en: { title: "This attraction is finished", prompt: "How would you like to continue your itinerary?", advance: "Go to the next stop now (adjust schedule automatically)", keep: "Keep the original schedule (free time)", recommend: "Find another attraction to add", cancel: "Not now" }
-            };
-            const labels = finishChoiceText[currentLanguage] || finishChoiceText.zh;
-            chooser.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🕒</div><h2>${labels.title}</h2><p>${labels.prompt}</p><button type="button" data-finish-mode="advance">${labels.advance}</button><button type="button" data-finish-mode="keep">${labels.keep}</button><button type="button" data-finish-mode="recommend">${labels.recommend}</button><button type="button" data-finish-mode="cancel" class="smart-finish-cancel">${labels.cancel}</button></div>`;
+            chooser.innerHTML = `<div class="smart-reminder-dialog"><div class="smart-reminder-popup-icon">🕒</div><h2>这个景点已结束</h2><p>你想如何安排后续行程？</p><button type="button" data-finish-mode="advance">立即前往下一站（自动调整时间）</button><button type="button" data-finish-mode="keep">保持原定时间（自由活动）</button><button type="button" data-finish-mode="recommend">看看能否增加一个景点</button><button type="button" data-finish-mode="cancel" class="smart-finish-cancel">暂不操作</button></div>`;
             document.body.appendChild(chooser);
             chooser.addEventListener("click", event => {
                 if (event.target === chooser) chooser.remove();
@@ -3866,8 +3853,8 @@ function changeLanguage(language) {
     if (!["zh", "ko", "en"].includes(language)) return;
 
     currentLanguage = language;
+    localStorage.setItem("travelPlannerLanguage", language);
     isKorean = currentLanguage === "ko";
-    try { localStorage.setItem("travelPlannerLanguage", currentLanguage); } catch (error) { /* storage may be unavailable */ }
 
     const translations = {
         zh: {
@@ -4147,6 +4134,7 @@ function changeLanguage(language) {
     }
 
     updateLiveLocationButton();
+    renderAiAssistantLanguage();
 }
 
 // ==========================================
@@ -4486,6 +4474,8 @@ function toggleLiveLocation() {
 // -------------------------
 function initializeTravelGuide() {
     renderLiveLocationPanel();
+    initializeAiAssistant();
+    if (currentLanguage !== "zh") changeLanguage(currentLanguage);
     renderSavedList();
     updateRouteModeLabels();
     const destinationInput = document.getElementById("destination");
@@ -4496,7 +4486,11 @@ function initializeTravelGuide() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", initializeTravelGuide);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeTravelGuide, { once: true });
+} else {
+    initializeTravelGuide();
+}
 
 // PWA：仅在 HTTPS 或 localhost 环境注册 Service Worker
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
@@ -4505,4 +4499,126 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
             console.warn("Service worker registration failed:", error);
         });
     });
+}
+
+
+// ============================================================
+// AI 旅行助手：网址版与 Capacitor Android App 共用
+// API Key 只保存在 Vercel 服务端环境变量，绝不写入客户端。
+// ============================================================
+let aiChatHistory = [];
+let aiChatBusy = false;
+const AI_CHAT_ENDPOINT = location.protocol === "capacitor:" || location.protocol === "file:"
+    ? "https://travel-planner-mauve-six.vercel.app/api/chat"
+    : "/api/chat";
+
+const aiAssistantCopy = {
+  zh: {
+    launcher:"AI 旅行助手", title:"AI 旅行助手", subtitle:"你的专属旅行顾问 · 随时为你规划", context:"已连接当前旅行计划",
+    welcome:"你好！我是你的 AI 旅行助手。你可以问我路线安排、景点替换、美食推荐或行程调整。",
+    suggestions:["优化我的路线","推荐附近景点","行程延误怎么办"], prompts:["帮我优化今天的旅行路线","推荐附近值得去的景点","如果行程延误，应该怎么调整？"],
+    placeholder:"输入你的旅行问题…", disclaimer:"AI 建议仅供参考；实时营业时间、票价与交通请出发前再次确认。", sending:"正在思考…", send:"发送",
+    empty:"请先输入一个旅行问题。", error:"暂时无法连接 AI 助手，请稍后重试。", notConfigured:"AI 助手尚未完成服务端配置。请管理员在 Vercel 添加 OPENAI_API_KEY。",
+    you:"你", assistant:"旅行助手", contextEmpty:"尚未生成行程；你也可以直接询问目的地攻略。"
+  },
+  ko: {
+    launcher:"AI 여행 도우미", title:"AI 여행 도우미", subtitle:"나만의 여행 컨설턴트 · 언제든 계획을 도와드려요", context:"현재 여행 일정과 연결됨",
+    welcome:"안녕하세요! AI 여행 도우미입니다. 여행 경로, 관광지 변경, 맛집 추천 또는 일정 조정에 대해 물어보세요.",
+    suggestions:["내 경로 최적화","주변 관광지 추천","일정이 늦어지면?"], prompts:["오늘 여행 경로를 최적화해 주세요","주변에 가볼 만한 관광지를 추천해 주세요","일정이 지연되면 어떻게 조정해야 하나요?"],
+    placeholder:"여행에 대해 무엇이든 물어보세요…", disclaimer:"AI 추천은 참고용입니다. 실시간 영업시간, 가격 및 교통은 출발 전에 확인하세요.", sending:"답변을 준비하고 있어요…", send:"보내기",
+    empty:"여행 질문을 입력해 주세요.", error:"AI 도우미에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", notConfigured:"AI 도우미 서버 설정이 아직 완료되지 않았습니다. 관리자에게 Vercel의 OPENAI_API_KEY 설정을 요청하세요.",
+    you:"나", assistant:"여행 도우미", contextEmpty:"아직 생성된 일정이 없습니다. 목적지에 대해 자유롭게 질문해 보세요."
+  },
+  en: {
+    launcher:"AI Travel Assistant", title:"AI Travel Assistant", subtitle:"Your personal travel concierge · Here to help", context:"Connected to your current trip",
+    welcome:"Hi! I’m your AI travel assistant. Ask me about routes, replacing attractions, local food, or adjusting your itinerary.",
+    suggestions:["Optimize my route","Find nearby attractions","What if I’m running late?"], prompts:["Please optimize my route for today","Recommend attractions worth visiting nearby","How should I adjust my itinerary if I’m delayed?"],
+    placeholder:"Ask anything about your trip…", disclaimer:"AI suggestions are for guidance. Recheck live opening hours, prices and transport before you go.", sending:"Thinking…", send:"Send",
+    empty:"Please enter a travel question.", error:"The AI assistant is temporarily unavailable. Please try again.", notConfigured:"The AI assistant is not configured yet. Ask the administrator to add OPENAI_API_KEY in Vercel.",
+    you:"You", assistant:"Travel assistant", contextEmpty:"No itinerary generated yet. You can still ask for destination ideas."
+  }
+};
+
+function renderAiAssistantLanguage() {
+  const t = aiAssistantCopy[currentLanguage] || aiAssistantCopy.zh;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  set("aiLauncherLabel", t.launcher); set("aiHeaderTitle", t.title); set("aiHeaderSubtitle", t.subtitle);
+  set("aiContextLine", currentPlan ? t.context : t.contextEmpty); set("aiWelcomeMessage", t.welcome);
+  set("aiDisclaimer", t.disclaimer);
+  const input = document.getElementById("aiChatInput"); if (input) input.placeholder = t.placeholder;
+  const suggestions = document.querySelectorAll("#aiSuggestions button");
+  suggestions.forEach((button, i) => { button.textContent = t.suggestions[i] || ""; button.dataset.prompt = t.prompts[i] || ""; });
+}
+
+function initializeAiAssistant() {
+  const root = document.getElementById("aiAssistantRoot");
+  if (!root || root.dataset.ready === "true") return;
+  root.dataset.ready = "true";
+  const panel = document.getElementById("aiChatPanel");
+  const launcher = document.getElementById("aiAssistantLauncher");
+  const close = document.getElementById("aiAssistantClose");
+  const form = document.getElementById("aiChatForm");
+  const input = document.getElementById("aiChatInput");
+  const openPanel = () => { panel.classList.add("is-open"); panel.setAttribute("aria-hidden", "false"); launcher.setAttribute("aria-expanded", "true"); input.focus(); };
+  const closePanel = () => { panel.classList.remove("is-open"); panel.setAttribute("aria-hidden", "true"); launcher.setAttribute("aria-expanded", "false"); };
+  launcher.addEventListener("click", () => panel.classList.contains("is-open") ? closePanel() : openPanel());
+  close.addEventListener("click", closePanel);
+  document.querySelectorAll("#aiSuggestions button").forEach(button => button.addEventListener("click", () => { input.value = button.dataset.prompt || ""; form.requestSubmit(); }));
+  form.addEventListener("submit", event => { event.preventDefault(); sendAiChatMessage(input.value); });
+  input.addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); form.requestSubmit(); } });
+  renderAiAssistantLanguage();
+}
+
+function appendAiChatMessage(role, text, extraClass = "") {
+  const list = document.getElementById("aiChatMessages"); if (!list) return;
+  const row = document.createElement("div"); row.className = `ai-message ${role === "assistant" ? "ai-message-assistant" : "ai-message-user"} ${extraClass}`;
+  if (role === "assistant") { const avatar = document.createElement("div"); avatar.className = "ai-message-avatar"; avatar.textContent = "✦"; row.appendChild(avatar); }
+  const bubble = document.createElement("div"); bubble.className = "ai-message-bubble"; bubble.textContent = text; row.appendChild(bubble);
+  list.appendChild(row); list.scrollTop = list.scrollHeight; return row;
+}
+
+function getAiTripContext() {
+  const value = id => document.getElementById(id)?.value || "";
+  let plan = "";
+  try { plan = currentPlan ? JSON.stringify(currentPlan).slice(0, 10000) : ""; } catch (_) {}
+  return {
+    language: currentLanguage,
+    destination: value("destination"), startDate: value("tripStartDate"), days: selectedDays || "",
+    people: selectedPeople || "", budget: value("budget"), preferences: selectedPreferences || [],
+    routeMode: routeMode || "automatic", itinerary: plan
+  };
+}
+
+async function sendAiChatMessage(rawText) {
+  const text = String(rawText || "").trim();
+  const t = aiAssistantCopy[currentLanguage] || aiAssistantCopy.zh;
+  if (!text) { appendAiChatMessage("assistant", t.empty); return; }
+  if (aiChatBusy) return;
+  const input = document.getElementById("aiChatInput"); if (input) input.value = "";
+  appendAiChatMessage("user", text);
+  aiChatHistory.push({ role: "user", content: text });
+  aiChatHistory = aiChatHistory.slice(-12);
+  aiChatBusy = true;
+  const send = document.getElementById("aiChatSend"); if (send) { send.disabled = true; send.classList.add("is-loading"); }
+  const pending = appendAiChatMessage("assistant", t.sending, "ai-message-pending");
+  try {
+    const response = await fetch(AI_CHAT_ENDPOINT, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: aiChatHistory, context: getAiTripContext() })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 503 && data.code === "AI_NOT_CONFIGURED") throw new Error(t.notConfigured);
+      throw new Error(data.error || t.error);
+    }
+    const answer = String(data.reply || "").trim() || t.error;
+    pending?.remove(); appendAiChatMessage("assistant", answer);
+    aiChatHistory.push({ role: "assistant", content: answer }); aiChatHistory = aiChatHistory.slice(-12);
+  } catch (error) {
+    pending?.remove(); appendAiChatMessage("assistant", error.message || t.error, "ai-message-error");
+  } finally {
+    aiChatBusy = false;
+    if (send) { send.disabled = false; send.classList.remove("is-loading"); }
+    input?.focus();
+  }
 }

@@ -178,8 +178,36 @@
 <!-- 地图功能 -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+
+  <!-- AI Travel Assistant -->
+  <div class="ai-assistant-root" id="aiAssistantRoot">
+    <button class="ai-launcher" id="aiAssistantLauncher" type="button" aria-label="Open AI travel assistant" aria-expanded="false">
+      <span class="ai-launcher-spark">✦</span><span class="ai-launcher-label" id="aiLauncherLabel">AI 旅行助手</span><span class="ai-launcher-dot"></span>
+    </button>
+    <section class="ai-chat-panel" id="aiChatPanel" aria-label="AI travel assistant" aria-hidden="true">
+      <header class="ai-chat-header">
+        <div class="ai-avatar">✦</div>
+        <div class="ai-chat-heading"><strong id="aiHeaderTitle">AI 旅行助手</strong><span id="aiHeaderSubtitle">你的专属旅行顾问 · 随时为你规划</span></div>
+        <button class="ai-close" id="aiAssistantClose" type="button" aria-label="Close">×</button>
+      </header>
+      <div class="ai-chat-context" id="aiContextLine">已连接当前旅行计划</div>
+      <div class="ai-chat-messages" id="aiChatMessages" aria-live="polite">
+        <div class="ai-message ai-message-assistant"><div class="ai-message-avatar">✦</div><div class="ai-message-bubble" id="aiWelcomeMessage">你好！我是你的 AI 旅行助手。你可以问我路线安排、景点替换、美食推荐或行程调整。</div></div>
+      </div>
+      <div class="ai-suggestions" id="aiSuggestions">
+        <button type="button" data-prompt="帮我优化今天的旅行路线">优化我的路线</button>
+        <button type="button" data-prompt="推荐附近值得去的景点">推荐附近景点</button>
+        <button type="button" data-prompt="如果行程延误，应该怎么调整？">行程延误怎么办</button>
+      </div>
+      <form class="ai-chat-composer" id="aiChatForm">
+        <textarea id="aiChatInput" rows="1" maxlength="1200" placeholder="输入你的旅行问题…" aria-label="Message the AI travel assistant"></textarea>
+        <button id="aiChatSend" type="submit" aria-label="Send message"><span>↑</span></button>
+      </form>
+      <div class="ai-chat-disclaimer" id="aiDisclaimer">AI 建议仅供参考；实时营业时间、票价与交通请出发前再次确认。</div>
+    </section>
+  </div>
+
 <!-- 旅游系统与手机通知插件入口 -->
-<script src="./data.js"></script>
-<script src="./script.js"></script>
+<script type="module" src="/main.js"></script>
 </body>
 </html>
