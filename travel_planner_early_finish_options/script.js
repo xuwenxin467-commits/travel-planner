@@ -3442,6 +3442,18 @@ resultHTML += `
 
 if (result) {
     result.innerHTML = resultHTML;
+    // 兜底：即使某个行程模板没有包含天气占位区，也强制在结果容器中创建可见天气面板。
+    let weatherPanel = document.getElementById("tripWeatherPanel");
+    if (!weatherPanel) {
+        weatherPanel = document.createElement("section");
+        weatherPanel.id = "tripWeatherPanel";
+        weatherPanel.className = "trip-weather-panel";
+        weatherPanel.setAttribute("aria-live", "polite");
+        weatherPanel.innerHTML = `<h3>${(weatherText[currentLanguage] || weatherText.zh).title}</h3><div class="weather-loading">${(weatherText[currentLanguage] || weatherText.zh).loading}</div>`;
+        const routeMap = result.querySelector(".route-map-section");
+        if (routeMap) result.insertBefore(weatherPanel, routeMap);
+        else result.appendChild(weatherPanel);
+    }
     const weatherNow = new Date();
     const weatherLocalToday = `${weatherNow.getFullYear()}-${String(weatherNow.getMonth()+1).padStart(2,"0")}-${String(weatherNow.getDate()).padStart(2,"0")}`;
     const weatherStartDate = document.getElementById("tripStartDate")?.value || weatherLocalToday;
