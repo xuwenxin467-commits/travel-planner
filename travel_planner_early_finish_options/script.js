@@ -3457,10 +3457,29 @@ if (result) {
     const weatherNow = new Date();
     const weatherLocalToday = `${weatherNow.getFullYear()}-${String(weatherNow.getMonth()+1).padStart(2,"0")}-${String(weatherNow.getDate()).padStart(2,"0")}`;
     const weatherStartDate = document.getElementById("tripStartDate")?.value || weatherLocalToday;
-    loadTripWeather(finalCity, selectedDays, weatherStartDate);
+    // 天气查询稍后在地图初始化完成后启动，避免地图/行程初始化覆盖天气区域。
     // 每一天在行程首次显示时都提供替代景点，不必先删除景点才出现。
     refreshAllTripAlternativeSuggestions();
     initializeTravelRouteMap();
+
+    // 最终兜底：地图初始化后再次确认天气面板仍在结果容器中，
+    // 并确保它位于路线地图之前。即使其他初始化逻辑重绘结果区域，也会重新插入。
+    let finalWeatherPanel = result.querySelector("#tripWeatherPanel");
+    if (!finalWeatherPanel) {
+        finalWeatherPanel = document.createElement("section");
+        finalWeatherPanel.id = "tripWeatherPanel";
+        finalWeatherPanel.className = "trip-weather-panel";
+        finalWeatherPanel.setAttribute("aria-live", "polite");
+    }
+    finalWeatherPanel.style.display = "block";
+    finalWeatherPanel.style.visibility = "visible";
+    finalWeatherPanel.style.minHeight = "90px";
+    finalWeatherPanel.innerHTML = `<div class="weather-loading">${(weatherText[currentLanguage] || weatherText.zh).loading}</div>`;
+    const finalRouteMap = result.querySelector(".route-map-section");
+    if (finalRouteMap) result.insertBefore(finalWeatherPanel, finalRouteMap);
+    else result.appendChild(finalWeatherPanel);
+    loadTripWeather(finalCity, selectedDays, weatherStartDate);
+
     startSmartReminderClock();
     if (localStorage.getItem("smartPhoneNotificationsEnabled") === "true") {
     scheduleSmartDepartureNotifications();
