@@ -375,34 +375,21 @@ function translateType(type) {
         "拍照": { zh: "拍照", ko: "사진 촬영", en: "Photography" },
         "购物": { zh: "购物", ko: "쇼핑", en: "Shopping" },
         "文艺展览": { zh: "文艺展览", ko: "문화·예술 전시", en: "Arts & Exhibitions" },
-        "文化艺术展览": { zh: "文化艺术展览", ko: "문화·예술 전시", en: "Arts & Exhibitions" },
-        "文化艺术": { zh: "文化艺术", ko: "문화·예술", en: "Arts & Culture" },
-        "主题乐园": { zh: "主题乐园", ko: "테마파크", en: "Theme Park" },
-        "传统街区": { zh: "传统街区", ko: "전통 거리", en: "Traditional District" },
         "美食": { zh: "美食", ko: "음식", en: "Food" }
     };
     return translations[type]?.[currentLanguage] || type || "";
 }
 
 function translateTime(time) {
-    if (!time) return "";
-    const value = String(time).trim();
     const translations = {
+        "1小时": { zh: "1小时", ko: "1시간", en: "1 hour" },
+        "2小时": { zh: "2小时", ko: "2시간", en: "2 hours" },
+        "3小时": { zh: "3小时", ko: "3시간", en: "3 hours" },
+        "4小时": { zh: "4小时", ko: "4시간", en: "4 hours" },
         "半天": { zh: "半天", ko: "반나절", en: "Half a day" },
-        "半天以上": { zh: "半天以上", ko: "반나절 이상", en: "Half a day or more" },
         "4小时以上": { zh: "4小时以上", ko: "4시간 이상", en: "4+ hours" }
     };
-    if (translations[value]) return translations[value][currentLanguage] || value;
-    const hourMatch = value.match(/^(\\d+(?:\\.\\d+)?)\\s*小时(以上)?$/);
-    if (hourMatch) {
-        const n = hourMatch[1], more = Boolean(hourMatch[2]);
-        if (currentLanguage === "ko") return `${n}시간${more ? " 이상" : ""}`;
-        if (currentLanguage === "en") return `${n} hour${Number(n) === 1 ? "" : "s"}${more ? " or more" : ""}`;
-        return `${n}小时${more ? "以上" : ""}`;
-    }
-    const minuteMatch = value.match(/^(\\d+)\\s*分钟$/);
-    if (minuteMatch) return currentLanguage === "ko" ? `${minuteMatch[1]}분` : currentLanguage === "en" ? `${minuteMatch[1]} min` : value;
-    return value;
+    return translations[time]?.[currentLanguage] || time || "";
 }
 
 function durationToMinutes(time) {
@@ -2780,72 +2767,44 @@ async function loadTripWeather(city, days, startDate) {
  const panel = document.getElementById("tripWeatherPanel");
  if (!panel) return;
  const lang = currentLanguage, t = weatherText[lang] || weatherText.zh;
- const safeCity = String(city || "").trim();
- const retryButton = `<button type="button" class="weather-refresh-button" onclick="loadTripWeather(${JSON.stringify(safeCity)},${Number(days)||1},${JSON.stringify(startDate||"")})">↻ ${t.refresh}</button>`;
  panel.innerHTML = `<div class="weather-loading" role="status">${t.loading}</div>`;
- if (!safeCity) {
-  panel.innerHTML = `<div class="weather-error">${t.failed}</div>${retryButton}`;
-  return;
- }
- const fetchWithTimeout = async (url, timeoutMs = 12000) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try { return await fetch(url, { signal: controller.signal, cache: "no-store" }); }
-  finally { clearTimeout(timer); }
- };
  try {
-  const cityCandidates = [...new Set([safeCity, normalizeDestination(safeCity)].filter(Boolean))];
-  let place = null;
-  for (const query of cityCandidates) {
-   for (const geoLang of ["en", "zh", "ko"]) {
-    try {
-     const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=${geoLang}&format=json`;
-     const geoRes = await fetchWithTimeout(geoUrl);
-     if (!geoRes.ok) continue;
-     const geo = await geoRes.json();
-     const results = Array.isArray(geo.results) ? geo.results : [];
-     place = results.find(item => item && Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))) || null;
-     if (place) break;
-    } catch (_) {}
-   }
-   if (place) break;
-  }
-  if (!place) throw new Error("geocoding-unavailable");
-  const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(place.latitude)}&longitude=${encodeURIComponent(place.longitude)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&timezone=auto&forecast_days=16`;
-  const forecastRes = await fetchWithTimeout(forecastUrl, 15000);
-  if (!forecastRes.ok) throw new Error("forecast-unavailable");
-  const forecast = await forecastRes.json(), daily = forecast.daily;
-  if (!daily || !Array.isArray(daily.time)) throw new Error("forecast-empty");
+  const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=${lang}&format=json`;
+  const geoRes = await fetch(geoUrl);
+  if (!geoRes.ok) throw new Error("Geocoding failed");
+  const geo = await geoRes.json();
+  const place = geo.results?.[0];
+  if (!place) throw new Error("Destination not found");
+  const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&timezone=auto&forecast_days=16`;
+  const forecastRes = await fetch(forecastUrl);
+  if (!forecastRes.ok) throw new Error("Forecast failed");
+  const forecast = await forecastRes.json();
+  const dates = forecast.daily?.time || [];
   const nowLocal = new Date();
   const localToday = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
-  const startDateKey = startDate || localToday;
+  const start = startDate || localToday;
+  const startIndex = dates.indexOf(start);
   const cards = [];
-  for (let i=0;i<Math.max(1,Math.min(Number(days)||1,16));i++) {
-   const date = new Date(`${startDateKey}T12:00:00`);
+  for (let i=0;i<days;i++) {
+   const date = new Date(`${start}T12:00:00`);
    date.setDate(date.getDate()+i);
    const dateKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-   const idx = daily.time.indexOf(dateKey);
+   const idx = dates.indexOf(dateKey);
    if (idx < 0) continue;
-   const code=daily.weather_code?.[idx] ?? -1;
-   const max=Number(daily.temperature_2m_max?.[idx]), min=Number(daily.temperature_2m_min?.[idx]);
-   const rain=Number(daily.precipitation_probability_max?.[idx] ?? 0), wind=Number(daily.wind_speed_10m_max?.[idx] ?? 0);
+   const code=forecast.daily.weather_code[idx], max=forecast.daily.temperature_2m_max[idx], min=forecast.daily.temperature_2m_min[idx];
+   const rain=forecast.daily.precipitation_probability_max?.[idx] ?? 0, wind=forecast.daily.wind_speed_10m_max?.[idx] ?? 0;
    const alerts=[];
-   if (rain>=50 || Number(daily.precipitation_sum?.[idx] ?? 0)>=1) alerts.push(t.rain);
+   if (rain>=50 || (forecast.daily.precipitation_sum?.[idx] ?? 0)>=1) alerts.push(t.rain);
    if (max>=33) alerts.push(t.heat);
    if (min<=0) alerts.push(t.cold);
    if (wind>=50) alerts.push(t.wind);
    const dateLabel = new Intl.DateTimeFormat(lang==="zh"?"zh-CN":lang==="ko"?"ko-KR":"en-US",{month:"short",day:"numeric"}).format(date);
    cards.push(`<article class="weather-day-card"><div class="weather-day-heading"><strong>${t.day}${i+1}${t.dayEnd}</strong><span>${dateLabel}</span></div><div class="weather-condition"><span class="weather-emoji">${weatherIcon(code)}</span><span>${weatherCodeLabel(code,lang)}</span></div><div class="weather-temperature">${Math.round(max)}° <span>/ ${Math.round(min)}°</span></div><div class="weather-metrics"><span>☔ ${t.rainChance}: ${rain}%</span><span>💨 ${t.windSpeed}: ${Math.round(wind)} km/h</span></div><div class="weather-alert ${alerts.length?"is-alert":"is-calm"}">${alerts.length ? alerts.join(" ") : t.clear}</div></article>`);
   }
-  const limitNote = cards.length < Number(days) ? `<p class="weather-limit-note">${t.forecastLimit}</p>` : "";
-  const placeLabel = [place.name, place.country].filter(Boolean).map(escapeHTML).join(", ");
-  panel.innerHTML = `<div class="weather-panel-heading"><div><h3>${t.title}</h3><p>${placeLabel}</p></div><button type="button" class="weather-refresh-button" onclick="loadTripWeather(${JSON.stringify(safeCity)},${Number(days)||1},${JSON.stringify(startDateKey)})">↻ ${t.refresh}</button></div><div class="weather-days-grid">${cards.join("") || `<p>${t.forecastLimit}</p>`}</div>${limitNote}<small class="weather-source">${t.source}</small>`;
+  const limitNote = cards.length < days ? `<p class="weather-limit-note">${t.forecastLimit}</p>` : "";
+  panel.innerHTML = `<div class="weather-panel-heading"><div><h3>${t.title}</h3><p>${escapeHTML(place.name)}${place.country?`, ${escapeHTML(place.country)}`:""}</p></div><button type="button" class="weather-refresh-button" onclick="loadTripWeather('${String(city).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}',${days},'${start}')">↻ ${t.refresh}</button></div><div class="weather-days-grid">${cards.join("") || `<p>${t.forecastLimit}</p>`}</div>${limitNote}<small class="weather-source">${t.source}</small>`;
  } catch (error) {
-  console.warn("Trip weather request failed:", error);
-  const message = error?.name === "AbortError"
-   ? (lang === "ko" ? "날씨 조회 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도해 주세요." : lang === "en" ? "Weather request timed out. Check your connection and try again." : "天气查询超时，请检查网络后重试。")
-   : t.failed;
-  panel.innerHTML = `<div class="weather-error">${message}</div>${retryButton}`;
+  panel.innerHTML = `<div class="weather-error">${t.failed}</div><button type="button" class="weather-refresh-button" onclick="loadTripWeather('${String(city).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}',${days},'${start}')">${t.refresh}</button>`;
  }
 }
 

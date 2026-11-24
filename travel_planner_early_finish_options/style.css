@@ -645,3 +645,92 @@ img, video, iframe { max-width: 100%; }
  .weather-days-grid { grid-template-columns:1fr; }
  .weather-refresh-button { align-self:flex-start; }
 }
+
+/* =========================================================
+   Visual refresh v2 — premium travel concierge
+   Keeps the existing layout and functionality intact.
+   ========================================================= */
+:root {
+  --ink: #17372d; --muted: #71847a; --green: #155640; --green-2: #2b765b;
+  --mint: #eaf5ee; --paper: #f4f7f2; --line: #dfe9e1;
+  --shadow: 0 20px 55px rgba(25, 62, 47, .075);
+}
+body {
+  background: radial-gradient(ellipse at 8% 4%, rgba(215,235,220,.42), transparent 32rem),
+              radial-gradient(ellipse at 92% 22%, rgba(233,226,204,.28), transparent 28rem), var(--paper);
+  letter-spacing: -.008em;
+}
+.site-header { background: rgba(255,255,255,.91); box-shadow: 0 5px 24px rgba(30,65,49,.035); }
+.header-inner { min-height: 70px; }
+.brand-mark { width: 38px; height: 38px; border-radius: 13px; box-shadow: 0 5px 13px rgba(21,86,64,.2); }
+.brand-name { font-size: 18px; }
+.language-switch { padding: 5px; border-radius: 16px; box-shadow: inset 0 1px 2px rgba(20,50,35,.035); }
+.language-switch button { padding: 9px 13px; transition: background .18s, color .18s, transform .18s; }
+.language-switch button:active { transform: scale(.97); }
+.page-shell { padding-top: 32px; }
+.hero {
+  min-height: 258px; padding: 48px 50px; border-radius: 30px;
+  background: radial-gradient(circle at 82% 15%, rgba(231,199,143,.22), transparent 12rem),
+              linear-gradient(116deg, #103c30 0%, #1a5a43 54%, #39785d 100%);
+  box-shadow: 0 24px 60px rgba(19,68,49,.17);
+}
+.hero::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(90deg,rgba(8,34,26,.12),transparent 65%); }
+.hero-copy { max-width: 650px; }
+.hero h1 { text-wrap: balance; }
+.hero-subtitle { font-size: 15px; }
+.hero-tags span { backdrop-filter: blur(8px); border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.105); }
+.planner-layout { gap: 24px; margin-top: 27px; }
+.planner-card, .results-column, .saved-section { border-color: rgba(211,226,215,.9); box-shadow: 0 17px 48px rgba(27,59,44,.065); }
+.planner-card { padding: 30px; }
+.planner-card > h2 { font-size: 21px; letter-spacing: -.035em; }
+.field-group { margin-bottom: 25px; }
+.field-group > label { font-size: 13px; letter-spacing: .005em; }
+input[type="text"], input[type="number"], input[type="date"], .ai-chat-composer textarea {
+  border-color: #d9e5dc; background: linear-gradient(180deg,#fff,#fbfdfb); border-radius: 13px;
+  transition: border-color .18s, box-shadow .18s, background .18s;
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus { border-color:#77a98e; background:#fff; box-shadow:0 0 0 4px rgba(43,118,91,.10); }
+.choice-row button, .preferences-grid button, .route-mode-button { min-height:43px; border-radius:13px; transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease; }
+.choice-row button:hover, .preferences-grid button:hover { transform:translateY(-1px); }
+.choice-row button.selected, .preferences-grid button.selected { background:linear-gradient(145deg,#edf7f0,#e4f1e8); box-shadow:inset 0 0 0 1px rgba(39,107,83,.08),0 4px 12px rgba(39,107,83,.06); }
+.primary-button { min-height:52px; border-radius:15px; background:linear-gradient(110deg,#124a37,#216b50); box-shadow:0 10px 22px rgba(23,75,59,.19); transition:transform .18s,box-shadow .18s,filter .18s; }
+.primary-button:hover { background:linear-gradient(110deg,#155640,#28795a); transform:translateY(-2px); box-shadow:0 14px 26px rgba(23,75,59,.23); }
+.primary-button:active { transform:translateY(0); }
+.results-header { padding:24px 27px; background:linear-gradient(110deg,#fbfdfb,#f5faf6); }
+.results-header h2 { font-size:22px; }
+.results-icon { box-shadow:inset 0 0 0 1px rgba(35,105,77,.06); }
+.results-content { padding:26px; }
+.empty-state { min-height:300px; }
+.empty-icon { box-shadow:0 8px 20px rgba(39,107,83,.09); }
+.day-card { padding:19px; border-radius:18px; box-shadow:0 5px 18px rgba(30,65,49,.035); transition:border-color .18s,box-shadow .18s; }
+.day-card:hover { border-color:#c9ddcf; box-shadow:0 8px 22px rgba(30,65,49,.06); }
+.day-card h2 { font-size:17px; }
+.place { padding-top:16px; padding-bottom:16px; }
+.place-title { font-size:14px; }
+.trip-weather-panel { border-color:#d9e8dd; border-radius:20px; background:radial-gradient(circle at 100% 0%,rgba(222,239,226,.52),transparent 15rem),linear-gradient(145deg,#f7fbf8,#fff); box-shadow:0 8px 24px rgba(26,69,48,.045); }
+.weather-day-card { border-radius:16px; box-shadow:0 5px 16px rgba(29,62,45,.035); transition:transform .18s,box-shadow .18s; }
+.weather-day-card:hover { transform:translateY(-2px); box-shadow:0 9px 22px rgba(29,62,45,.075); }
+.weather-temperature { letter-spacing:-.04em; }
+.weather-refresh-button, .secondary-button, .live-location-button { transition:transform .16s,background .16s,border-color .16s; }
+.weather-refresh-button:hover, .secondary-button:hover, .live-location-button:hover { transform:translateY(-1px); border-color:#a9cbb6; }
+.saved-section { padding:29px; }
+.saved-item { border-radius:15px; transition:border-color .18s,transform .18s; }
+.saved-item:hover { border-color:#c5daca; transform:translateY(-1px); }
+.site-footer { color:#708278; }
+.ai-launcher { background:linear-gradient(135deg,#123f32,#28765a 80%); box-shadow:0 14px 36px rgba(20,75,58,.3); }
+.ai-chat-panel { border-color:rgba(28,76,60,.16); }
+.ai-chat-header { background:linear-gradient(120deg,#103d30,#287459); }
+.ai-chat-messages { background:linear-gradient(180deg,#fbfdfb,#f4f8f5); }
+.ai-chat-composer button { background:linear-gradient(135deg,#155640,#28795a); }
+:focus-visible { outline:3px solid rgba(64,137,99,.35); outline-offset:2px; }
+button:disabled { cursor:not-allowed; opacity:.58; }
+@media (min-width:1000px) { .planner-card { position:sticky; top:92px; } }
+@media (max-width:760px) { .page-shell{padding-top:19px}.hero{min-height:235px;padding:30px 24px}.planner-card{position:static} }
+@media (max-width:540px) {
+  .header-inner{min-height:62px;padding:10px 13px}.brand-mark{width:34px;height:34px}.brand-name{font-size:15px}
+  .language-switch{gap:2px}.language-switch button{padding:7px 8px;font-size:11px}.hero{border-radius:21px}
+  .hero h1{font-size:clamp(26px,8vw,32px)}.hero-tags{gap:6px}.hero-tags span{font-size:10px}
+  .planner-layout{gap:16px}.planner-card,.saved-section{box-shadow:0 10px 28px rgba(27,59,44,.055)}
+  .results-content{padding:15px}.day-card{border-radius:15px}.trip-weather-panel{border-radius:16px}
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important} }
