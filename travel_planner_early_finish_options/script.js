@@ -2803,6 +2803,7 @@ async function loadTripWeather(city, days, startDate) {
   }
   const limitNote = cards.length < days ? `<p class="weather-limit-note">${t.forecastLimit}</p>` : "";
   panel.innerHTML = `<div class="weather-panel-heading"><div><h3>${t.title}</h3><p>${escapeHTML(place.name)}${place.country?`, ${escapeHTML(place.country)}`:""}</p></div><button type="button" class="weather-refresh-button" onclick="loadTripWeather('${String(city).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}',${days},'${start}')">↻ ${t.refresh}</button></div><div class="weather-days-grid">${cards.join("") || `<p>${t.forecastLimit}</p>`}</div>${limitNote}<small class="weather-source">${t.source}</small>`;
+  renderWeatherSmartAdvice(forecast, start, days);
  } catch (error) {
   panel.innerHTML = `<div class="weather-error">${t.failed}</div><button type="button" class="weather-refresh-button" onclick="loadTripWeather('${String(city).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}',${days},'${start}')">${t.refresh}</button>`;
  }
@@ -3478,6 +3479,7 @@ if (result) {
     const finalRouteMap = result.querySelector(".route-map-section");
     if (finalRouteMap) result.insertBefore(finalWeatherPanel, finalRouteMap);
     else result.appendChild(finalWeatherPanel);
+    updateSmartConsoleFromPlan();
     loadTripWeather(finalCity, selectedDays, weatherStartDate);
 
     startSmartReminderClock();
@@ -4247,6 +4249,7 @@ function changeLanguage(language) {
 
     updateLiveLocationButton();
     renderAiAssistantLanguage();
+    renderSmartConsoleLanguage();
 }
 
 // ==========================================
@@ -4700,7 +4703,7 @@ function getAiTripContext() {
     language: currentLanguage,
     destination: value("destination"), startDate: value("tripStartDate"), days: selectedDays || "",
     people: selectedPeople || "", budget: value("budget"), preferences: selectedPreferences || [],
-    routeMode: routeMode || "automatic", itinerary: plan
+    routeMode: routeMode || "automatic", itinerary: plan, expenses: (typeof smartExpenses !== 'undefined' ? smartExpenses : []), weather: (typeof latestSmartWeatherContext !== 'undefined' ? latestSmartWeatherContext : "")
   };
 }
 
@@ -4741,4 +4744,62 @@ async function sendAiChatMessage(rawText) {
 }
 
 // AI 助手配置与发送函数均已定义，现在安全地绑定聊天事件。
+// ============================================================
+// Smart Travel Console: expense tracking + weather-aware advice
+// ============================================================
+const smartConsoleCopy = {
+ zh:{waiting:"等待生成行程",ready:"行程已连接",none:"尚未选择",days:"天",budgetNone:"未设置",budgetHint:"可在左侧填写",weatherWait:"等待天气",weatherHint:"生成行程后查询",weatherTitle:"天气感知建议",weatherSubtitle:"根据天气为每天提供活动建议",weatherEmpty:"生成旅行计划后，将根据天气推荐室内或户外活动。",ask:"让 AI 帮我调整路线 ↗",expenseTitle:"旅行花费追踪",expenseSubtitle:"记录实际支出，查看预算余额",spent:"已花费",remaining:"预算余额",amount:"金额",add:"记一笔",categories:{food:"餐饮",transport:"交通",ticket:"门票",shopping:"购物",other:"其他"},empty:"还没有记录支出",currency:"¥",rain:"有雨天风险，优先安排室内展览、博物馆、商场等活动。",sun:"天气相对适合户外活动，可安排公园、步行街或观景点。",hot:"天气较热，建议把户外活动安排在早晚，中午选择室内场所。",cold:"天气较冷，建议增加室内活动并预留交通缓冲。",forecast:"天气建议基于当前可获取的预报；出行前请再次确认。",spentOver:"已超过预算",within:"预算使用正常",notSet:"先填写旅行预算，即可计算余额。"},
+ ko:{waiting:"여행 일정 대기 중",ready:"일정 연결됨",none:"미선택",days:"일",budgetNone:"미설정",budgetHint:"왼쪽에서 입력할 수 있어요",weatherWait:"날씨 대기 중",weatherHint:"일정을 생성하면 조회합니다",weatherTitle:"날씨 기반 추천",weatherSubtitle:"날씨에 따라 실내·야외 활동 추천",weatherEmpty:"여행 계획을 생성하면 날씨에 맞는 활동을 추천합니다.",ask:"AI에게 경로 조정 요청 ↗",expenseTitle:"여행 지출 관리",expenseSubtitle:"실제 지출을 기록하고 잔액 확인",spent:"사용 금액",remaining:"남은 예산",amount:"금액",add:"추가",categories:{food:"식비",transport:"교통",ticket:"입장권",shopping:"쇼핑",other:"기타"},empty:"아직 지출 내역이 없습니다",currency:"₩",rain:"비 예보가 있습니다. 실내 전시, 박물관, 쇼핑몰을 우선 고려하세요.",sun:"야외 활동에 비교적 좋은 날씨입니다. 공원, 거리 산책, 전망대를 고려하세요.",hot:"더운 날씨입니다. 야외 활동은 아침·저녁에, 한낮에는 실내 활동을 추천합니다.",cold:"추운 날씨입니다. 실내 활동을 늘리고 이동 여유 시간을 확보하세요.",forecast:"날씨 추천은 현재 확인 가능한 예보를 기반으로 합니다. 출발 전 다시 확인하세요.",spentOver:"예산 초과",within:"예산 범위 내",notSet:"여행 예산을 입력하면 잔액을 계산합니다."},
+ en:{waiting:"Waiting for a trip",ready:"Trip connected",none:"Not selected",days:"days",budgetNone:"Not set",budgetHint:"Enter it in the planner",weatherWait:"Awaiting forecast",weatherHint:"Fetched after planning",weatherTitle:"Weather-aware suggestions",weatherSubtitle:"Activity ideas based on the forecast",weatherEmpty:"Generate a trip to receive indoor or outdoor activity suggestions.",ask:"Ask AI to adjust my route ↗",expenseTitle:"Trip expense tracker",expenseSubtitle:"Log real spending and monitor your balance",spent:"Spent",remaining:"Remaining",amount:"Amount",add:"Add expense",categories:{food:"Food",transport:"Transport",ticket:"Tickets",shopping:"Shopping",other:"Other"},empty:"No expenses recorded yet",currency:"₩",rain:"Rain risk detected. Prioritize indoor exhibitions, museums, and shopping areas.",sun:"Conditions look suitable for outdoor plans such as parks, walking streets, and viewpoints.",hot:"Hot conditions expected. Plan outdoor activities in the morning or evening and go indoors at midday.",cold:"Cold conditions expected. Add indoor activities and allow extra travel time.",forecast:"Suggestions use the available forecast. Please recheck before departure.",spentOver:"Over budget",within:"Within budget",notSet:"Enter a trip budget to calculate your remaining balance."}
+};
+let smartExpenses = [];
+let latestSmartWeatherContext = "";
+function smartCopy(){return smartConsoleCopy[currentLanguage] || smartConsoleCopy.zh;}
+function smartExpenseKey(){return `travelExpenses:${(document.getElementById('destination')?.value||'trip').trim().toLowerCase()}:${document.getElementById('tripStartDate')?.value||'unscheduled'}`;}
+function loadSmartExpenses(){try{smartExpenses=JSON.parse(localStorage.getItem(smartExpenseKey())||'[]');if(!Array.isArray(smartExpenses))smartExpenses=[];}catch(_){smartExpenses=[];}renderSmartExpenses();}
+function renderSmartExpenses(){
+ const t=smartCopy(),budget=Number(document.getElementById('budget')?.value||0),spent=smartExpenses.reduce((sum,x)=>sum+Number(x.amount||0),0),remaining=budget-spent;
+ const currency='¥';
+ const money=n=>currency+Number(n).toLocaleString(currentLanguage==='en'?'en-US':currentLanguage==='ko'?'ko-KR':'zh-CN',{maximumFractionDigits:0});
+ const spentEl=document.getElementById('expenseSpent'),remainEl=document.getElementById('expenseRemaining'),bar=document.getElementById('expenseProgressBar'),list=document.getElementById('expenseList');
+ if(spentEl)spentEl.textContent=money(spent);if(remainEl)remainEl.textContent=budget>0?money(remaining):'—';if(bar)bar.style.width=budget>0?`${Math.min(100,spent/budget*100)}%`:'0%';
+ if(list){list.innerHTML='';if(!smartExpenses.length){const li=document.createElement('li');li.className='expense-empty';li.textContent=t.empty;list.appendChild(li);}else smartExpenses.slice(-5).reverse().forEach(x=>{const li=document.createElement('li'),name=document.createElement('span'),value=document.createElement('strong');name.textContent=`${t.categories[x.category]||t.categories.other} · ${x.date}`;value.textContent=money(x.amount);li.append(name,value);list.appendChild(li);});}
+ const metric=document.getElementById('metricBudget');if(metric)metric.textContent=budget>0?money(budget):t.budgetNone;
+ const hint=document.getElementById('metricBudgetHint');if(hint)hint.textContent=budget>0?(remaining<0?t.spentOver:t.within):t.budgetHint;
+}
+function renderSmartConsoleLanguage(){
+ const t=smartCopy(),map={consoleEyebrow:'TRIP INTELLIGENCE',consoleTitle:currentLanguage==='ko'?'스마트 여행 대시보드':currentLanguage==='en'?'Smart trip dashboard':'智能旅行控制台',consoleSubtitle:currentLanguage==='ko'?'날씨, 예산, 일정 상태를 한곳에서 관리':currentLanguage==='en'?'Manage weather, budget and itinerary status in one place':'天气、预算与行程状态集中管理',metricDestinationLabel:currentLanguage==='ko'?'목적지':currentLanguage==='en'?'Destination':'目的地',metricDaysLabel:currentLanguage==='ko'?'여행 기간':currentLanguage==='en'?'Trip length':'旅行天数',metricBudgetLabel:currentLanguage==='ko'?'총 예산':currentLanguage==='en'?'Total budget':'总预算',metricWeatherLabel:currentLanguage==='ko'?'날씨 전략':currentLanguage==='en'?'Weather strategy':'天气策略',weatherSmartTitle:t.weatherTitle,weatherSmartSubtitle:t.weatherSubtitle,expenseTitle:t.expenseTitle,expenseSubtitle:t.expenseSubtitle,expenseSpentLabel:t.spent,expenseRemainingLabel:t.remaining,expenseAddButton:t.add};
+ Object.entries(map).forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.textContent=value;});
+ const amount=document.getElementById('expenseAmount');if(amount)amount.placeholder=t.amount;
+ const cat=document.getElementById('expenseCategory');if(cat){[...cat.options].forEach(o=>o.textContent=t.categories[o.value]||t.categories.other);cat.setAttribute('aria-label',t.expenseTitle);}
+ const status=document.getElementById('consoleStatus');if(status)status.textContent=(typeof currentPlan!=='undefined' && currentPlan)?t.ready:t.waiting;
+ const ask=document.getElementById('weatherAskAi');if(ask)ask.textContent=t.ask;
+ renderSmartExpenses();
+}
+function updateSmartConsoleFromPlan(){
+ const t=smartCopy(),dest=document.getElementById('destination')?.value?.trim()||t.none,days=(typeof selectedDays!=='undefined'?selectedDays:0)||0;
+ const d=document.getElementById('metricDestination');if(d)d.textContent=dest;
+ const dh=document.getElementById('metricDestinationHint');if(dh)dh.textContent=document.getElementById('tripStartDate')?.value||'';
+ const n=document.getElementById('metricDays');if(n)n.textContent=days?`${days} ${t.days}`:'—';
+ const status=document.getElementById('consoleStatus');if(status){status.textContent=t.ready;status.parentElement?.classList.add('is-ready');}
+ loadSmartExpenses();renderSmartExpenses();
+}
+function renderWeatherSmartAdvice(forecast, tripStart, tripDays){
+ const t=smartCopy(),box=document.getElementById('weatherSmartAdvice'),metric=document.getElementById('metricWeather');if(!box||!forecast?.daily)return;
+ const daily=forecast.daily,dateKeys=daily.time||[],rain=daily.precipitation_probability_max||[],max=daily.temperature_2m_max||[],min=daily.temperature_2m_min||[];
+ const picks=[];for(let day=0;day<Math.min(Number(tripDays)||0,5);day++){const date=new Date(`${tripStart}T12:00:00`);date.setDate(date.getDate()+day);const key=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`,idx=dateKeys.indexOf(key);if(idx<0)continue;let advice='';if((rain[idx]||0)>=50)advice=t.rain;else if((max[idx]||0)>=33)advice=t.hot;else if((min[idx]||0)<=2)advice=t.cold;else advice=t.sun;picks.push({day:day+1,advice,rain:rain[idx]||0,high:max[idx]||0,low:min[idx]||0});} latestSmartWeatherContext = JSON.stringify(picks.map(x=>({day:x.day,rainChance:x.rain,high:x.high,low:x.low,advice:x.advice}))).slice(0,3000);
+ const hasRisk=picks.some(x=>x.rain>=50||x.high>=33||x.low<=2);
+ if(metric)metric.textContent=picks.length===0?(currentLanguage==='ko'?'예보 없음':currentLanguage==='en'?'No forecast':'暂无预报'):hasRisk?(currentLanguage==='ko'?'실내 일정 추천':currentLanguage==='en'?'Adapt plans':'建议调整'):(currentLanguage==='ko'?'야외 활동 적합':currentLanguage==='en'?'Outdoor-friendly':'适合户外');
+ box.className='weather-advice-list';box.innerHTML='';if(!picks.length){box.textContent=currentLanguage==='ko'?'해당 날짜의 예보를 확인할 수 없습니다.':currentLanguage==='en'?'No forecast is available for the selected trip dates.':'所选旅行日期暂无可用天气预报。';return;}picks.slice(0,3).forEach(x=>{const item=document.createElement('div');item.className='weather-advice-item';item.textContent=`${currentLanguage==='ko'?x.day+'일차':currentLanguage==='en'?'Day '+x.day:'第'+x.day+'天'} · ${x.advice}`;box.appendChild(item);});
+ const note=document.createElement('div');note.className='tool-empty';note.textContent=t.forecast;box.appendChild(note);
+}
+function initializeSmartConsole(){
+ renderSmartConsoleLanguage();
+ const form=document.getElementById('expenseForm');if(form&&!form.dataset.ready){form.dataset.ready='1';form.addEventListener('submit',e=>{e.preventDefault();const amount=Number(document.getElementById('expenseAmount')?.value||0);if(!(amount>0))return;smartExpenses.push({amount,category:document.getElementById('expenseCategory')?.value||'other',date:new Date().toLocaleDateString()});localStorage.setItem(smartExpenseKey(),JSON.stringify(smartExpenses));document.getElementById('expenseAmount').value='';renderSmartExpenses();});}
+ const ask=document.getElementById('weatherAskAi');if(ask&&!ask.dataset.ready){ask.dataset.ready='1';ask.addEventListener('click',()=>{const launcher=document.getElementById('aiAssistantLauncher');launcher?.click();const input=document.getElementById('aiChatInput');if(input){input.value=currentLanguage==='ko'?'날씨 예보를 고려해 실내외 활동을 조정하고 오늘 일정을 다시 계획해 주세요.':currentLanguage==='en'?'Please adjust my itinerary based on the weather forecast, prioritizing suitable indoor or outdoor activities.':'请根据天气预报调整我的行程，合理安排室内和室外活动。';input.focus();}});}
+ ['destination','budget','tripStartDate'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.dataset.smartBound){el.dataset.smartBound='1';el.addEventListener('change',()=>{if(id==='destination'||id==='tripStartDate')loadSmartExpenses();renderSmartExpenses();});el.addEventListener('input',renderSmartExpenses);}});
+ if(document.getElementById('destination')?.value)updateSmartConsoleFromPlan();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initializeSmartConsole,{once:true});else initializeSmartConsole();
+
 initializeAiAssistant();

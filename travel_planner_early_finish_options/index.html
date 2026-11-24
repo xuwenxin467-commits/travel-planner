@@ -51,6 +51,20 @@
       </div>
     </section>
 
+    <section class="smart-console" id="smartConsole" aria-label="Smart trip dashboard">
+      <div class="console-heading"><div><p class="eyebrow" id="consoleEyebrow">TRIP INTELLIGENCE</p><h2 id="consoleTitle">智能旅行控制台</h2><p id="consoleSubtitle">天气、预算与行程状态集中管理</p></div><span class="console-live"><i></i><span id="consoleStatus">等待生成行程</span></span></div>
+      <div class="console-metrics">
+        <article class="console-metric"><span class="metric-icon">📍</span><small id="metricDestinationLabel">目的地</small><strong id="metricDestination">尚未选择</strong><em id="metricDestinationHint">生成行程后更新</em></article>
+        <article class="console-metric"><span class="metric-icon">🗓️</span><small id="metricDaysLabel">旅行天数</small><strong id="metricDays">—</strong><em id="metricDaysHint">选择旅行日期</em></article>
+        <article class="console-metric"><span class="metric-icon">💰</span><small id="metricBudgetLabel">总预算</small><strong id="metricBudget">未设置</strong><em id="metricBudgetHint">可在左侧填写</em></article>
+        <article class="console-metric"><span class="metric-icon">🌦️</span><small id="metricWeatherLabel">天气策略</small><strong id="metricWeather">等待天气</strong><em id="metricWeatherHint">生成行程后查询</em></article>
+      </div>
+      <div class="console-tools">
+        <section class="console-tool weather-intelligence"><div class="tool-title"><span>🌦️</span><div><h3 id="weatherSmartTitle">天气感知建议</h3><p id="weatherSmartSubtitle">根据天气为每天提供活动建议</p></div></div><div id="weatherSmartAdvice" class="tool-empty">生成旅行计划后，将根据天气推荐室内或户外活动。</div><button type="button" class="tool-action" id="weatherAskAi">让 AI 帮我调整路线 ↗</button></section>
+        <section class="console-tool expense-tool"><div class="tool-title"><span>🧾</span><div><h3 id="expenseTitle">旅行花费追踪</h3><p id="expenseSubtitle">记录实际支出，查看预算余额</p></div></div><div class="expense-summary"><div><small id="expenseSpentLabel">已花费</small><strong id="expenseSpent">¥0</strong></div><div><small id="expenseRemainingLabel">预算余额</small><strong id="expenseRemaining">—</strong></div></div><div class="expense-progress"><span id="expenseProgressBar"></span></div><form id="expenseForm" class="expense-form"><input id="expenseAmount" type="number" min="1" step="1" placeholder="金额" required><select id="expenseCategory" aria-label="Expense category"><option value="food">餐饮</option><option value="transport">交通</option><option value="ticket">门票</option><option value="shopping">购物</option><option value="other">其他</option></select><button type="submit" id="expenseAddButton">记一笔</button></form><ul id="expenseList" class="expense-list"></ul></section>
+      </div>
+    </section>
+
     <section class="planner-layout">
       <form class="planner-card" onsubmit="event.preventDefault(); generatePlan();">
         <h2 id="plannerHeading">计划你的旅行</h2>
