@@ -3970,6 +3970,11 @@ function changeLanguage(language) {
     localStorage.setItem("travelPlannerLanguage", language);
     isKorean = currentLanguage === "ko";
 
+    // 先立即刷新智能旅行控制台，避免后续其他模块的语言刷新异常影响控制台。
+    if (typeof renderSmartConsoleLanguage === "function") {
+        renderSmartConsoleLanguage();
+    }
+
     const translations = {
         zh: {
             pageTitle: "智游旅行 - 旅游路线推荐系统",
@@ -4249,7 +4254,6 @@ function changeLanguage(language) {
 
     updateLiveLocationButton();
     renderAiAssistantLanguage();
-    renderSmartConsoleLanguage();
 }
 
 // ==========================================
